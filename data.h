@@ -61,17 +61,13 @@ static const struct { const char *s; float gate, swing, atk; } RHYTHM_DEF[NRHYTH
     {"X-------x-----x-", 0.9f, 0.0f, 0.0f},
     {"X-----x-----x---", 0.8f, 0.0f, 0.0f},
 };
-#define NGRID 24
+#define NGRID 19
 /* chord SETS: the chords of a song, one per BLACK key from the left (up to 8 of them); the white keys play a melody in the
  * scale of the chord that sounds. A chord is its semitones above the set's key + a quality (M maj, V dominant-major, m, D dom7,
  * d dim, s sus4, S sus2, a aug); key 0 = C .. 11 = B is the song's own key, rich the richness it starts with. */
 static const struct { const char *name, *by; uint8_t key, rich; const char *white; } GRID_DEF[NGRID] = {
     {"LET IT BE", "THE BEATLES", 0, 0, "0M 7M 9m 5M"},
-    {"STAND BY ME", "BEN E KING", 9, 0, "0M 9m 5M 7M"},
-    {"AUTUMN LEAVES", "JAZZ STANDARD", 7, 1, "5m 10D 3M 8M 2d 7D 0m"},
-    {"DANCING QUEEN", "ABBA", 9, 0, "0M 5M 9m 7D"},
     {"STAIRWAY TO HEAVEN", "LED ZEPPELIN", 9, 0, "0m 3M 5M 8M 10M 7M"},
-    {"BILLIE JEAN", "MICHAEL JACKSON", 6, 1, "0m 2m 8M"},
     {"TAKE ON ME", "A HA", 9, 0, "0M 9m 5M 7M 2m"},
     {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M"},
     {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 3M 5m 7s"},
@@ -84,7 +80,6 @@ static const struct { const char *name, *by; uint8_t key, rich; const char *whit
     {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M"},
     {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M"},
     {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M"},
-    {"AS IT WAS", "HARRY STYLES", 9, 0, "0M 5M 7M 9m 2m"},
     {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M"},
     {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M"},
     {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M"},

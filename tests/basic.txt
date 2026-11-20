@@ -83,10 +83,10 @@ wait 30
 expect page 2
 turn K1 1
 wait 30
-expect key 10
+expect key 1
 turn K1 -1
 wait 30
-expect key 9
+expect key 0
 tap ENV
 wait 60
 expect page 3

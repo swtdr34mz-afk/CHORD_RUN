@@ -13,7 +13,7 @@ Une seule fonction par commande, sans touche shift.
 | Commande | Fonction |
 | --- | --- |
 | Les 27 touches | Accords de la grille : même nom de note, même accord (Do5 = 8e accord). Blanches = sûrs, noires = épices. Sous le Do4 une octave plus bas, au-dessus du Do5 une octave plus haut |
-| SELECT | Grille d'accords (38) |
+| SELECT | Set d'accords (8) : les 4 à 8 accords d'un morceau sur les touches blanches ; la touche noire à droite d'un accord en joue une version plus riche |
 | ALGORITHM | Rythme des accords (16). OFF : l'accord sonne tant que la touche est enfoncée. Avec un rythme, l'accord continue (latch) : retaper la même touche l'arrête |
 | PRESET | Son (13, la famille s'affiche). Chaque son a son propre cutoff : le bouton K1 de la page principale le déplace vers le haut (plus clair) ou le bas (plus doux), 50 % = le son tel qu'il est conçu |
 | K1 / K2 / K3 / K4 | Les 4 réglages de la page en cours, toujours affichés en bas de l'écran. Page principale : cutoff, glide, longueur des notes, batterie (niveau ; 0 = pas de batterie) |

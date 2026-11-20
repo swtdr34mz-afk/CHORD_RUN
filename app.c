@@ -68,7 +68,8 @@ static float reso_q(void) { return 1.0f; }
 
 /* ------------------------------------------------------------------ chords --- */
 typedef struct { uint8_t semi; char q; } chord_def_t;
-static chord_def_t grid_w[NGRID][8], grid_b[NGRID][5];
+static chord_def_t grid_w[NGRID][8];
+static uint8_t grid_n[NGRID];             /* the chords in a set (4..8) */
 static const char *const NOTE[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
 static const char *const RICH_NAME[4] = {"TRIAD", "7TH", "9TH", "LUSH"};
 static const char *const VOICING_NAME[3] = {"CLOSE", "OPEN", "WIDE"};
@@ -120,23 +121,45 @@ static int quality_ivs(char q, int rich, int8_t *iv)
 typedef struct { int root; int8_t iv[6]; int n; int bass_off; int oct; int shift; } chord_t;
 
 #define KEY_C4 7                         /* key index of C4 (key 0 is F3) */
-static chord_t build_chord(int key)
+/* a key -> the set's chord (0..7) it plays; *var = 1 on a black key (the richer version of the chord to its left);
+ * -1 when the key is silent (the set has no such chord). *oct: the octave of the key, as the voicing wants it */
+static int key_slot(int key, int *var, int *oct)
+{
+    static const int8_t LEFT[5] = {0, 1, 3, 4, 5};             /* the white chord left of each black key (C# D# F# G# A#) */
+    int rel = key - KEY_C4, pos = ((rel % 12) + 12) % 12, i, n = grid_n[set.grid];
+    *var = 0;
+    *oct = rel < 0 ? -1 : rel / 12;
+    if (pos == 0 && *oct >= 1) return n >= 8 ? 7 : 0;          /* C5: the 8th chord, or the first again an octave up */
+    for (i = 0; i < 7; i++) if (WHITE_IDX[i] == pos) return i < n ? i : -1;
+    for (i = 0; i < 5; i++)
+        if (BLACK_IDX[i] == pos) { *var = 1; return LEFT[i] < n ? LEFT[i] : -1; }
+    return -1;
+}
+
+static chord_t slot_chord(int slot, int var, int oct)
 {
     chord_t c;
     const chord_def_t *d;
-    int rel = key - KEY_C4, pos = ((rel % 12) + 12) % 12, oct = rel < 0 ? -1 : rel / 12, i;
-    d = &grid_w[set.grid][0];
-    if (pos == 0 && oct >= 1) d = &grid_w[set.grid][7];            /* C5: the grid's 8th chord */
-    else {
-        for (i = 0; i < 7; i++) if (WHITE_IDX[i] == pos) d = &grid_w[set.grid][i];
-        for (i = 0; i < 5; i++) if (BLACK_IDX[i] == pos) d = &grid_b[set.grid][i];
-    }
+    int rich = set.rich, i;
+    c.root = 0; c.n = 0; c.bass_off = 0; c.oct = oct; c.shift = set.octave * 12;
+    if (slot < 0 || slot > 7) return c;
+    d = &grid_w[set.grid][slot];
     c.root = (set.key + d->semi) % 12;
-    c.n = quality_ivs(d->q, set.rich, c.iv);
-    c.bass_off = 0;
-    c.oct = oct;
-    c.shift = set.octave * 12;
+    c.n = quality_ivs(d->q, rich, c.iv);
+    if (var) {                                                  /* the black key: one step richer (one poorer at LUSH) */
+        int8_t v[6];
+        int nv = quality_ivs(d->q, rich < 3 ? rich + 1 : 2, v);
+        if (nv == c.n && rich < 2) nv = quality_ivs(d->q, rich + 2, v);   /* a 7th chord's next step looks the same: go one more */
+        for (i = 0; i < nv; i++) c.iv[i] = v[i];
+        c.n = nv;
+    }
     return c;
+}
+
+static chord_t build_chord(int key)
+{
+    int var, oct, slot = key_slot(key, &var, &oct);
+    return slot_chord(slot, var, oct);
 }
 
 static int has(const chord_t *c, int pc)
@@ -379,6 +402,7 @@ static void play(int idx)
 {
     chord_t c = build_chord(idx);
     float notes[4], bass, g = active ? glide_s() : 0.0f;
+    if (c.n == 0) return;                                       /* a silent key */
     uint32_t now = plat_ms();
     int i;
     voice_chord(&c, notes);
@@ -401,7 +425,13 @@ static void stop(void)
     eng_stop();
 }
 
-static void rechord(void) { if (active && cur_idx >= 0) play(cur_idx); }
+static void rechord(void)
+{
+    int v, o;
+    if (!active || cur_idx < 0) return;
+    if (key_slot(cur_idx, &v, &o) < 0) stop();                  /* the new set has no chord on this key */
+    else play(cur_idx);
+}
 
 /* ------------------------------------------------------------------ pages --- */
 enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_DECOR, PG_DRUMS, NPAGE };
@@ -454,8 +484,7 @@ void app_init(void)
 {
     int g;
     for (g = 0; g < NGRID; g++) {
-        parse_chords(GRID_DEF[g].white, grid_w[g], 8);
-        parse_chords(GRID_DEF[g].black, grid_b[g], 5);
+        grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
     }
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || !settings_ok())
         settings_defaults();
@@ -591,7 +620,7 @@ static void encoder(int k, int32_t e)
 {
     switch (k) {
     case EN_SELECT:
-        wrap_u8(&set.grid, e, NGRID); set.rich = GRID_DEF[set.grid].rich; app_say("GRID", GRID_DEF[set.grid].name);
+        wrap_u8(&set.grid, e, NGRID); set.rich = GRID_DEF[set.grid].rich; set.key = GRID_DEF[set.grid].key; app_say("SET", GRID_DEF[set.grid].name);
         rechord();
         break;
     case EN_ALGO:
@@ -651,6 +680,8 @@ static void input(void)
     clock_follow(now);
     for (k = 0; k < NKEYS; k++) {
         uint32_t bit = 1u << k;
+        int kv, ko;
+        if (key_slot((int)k, &kv, &ko) < 0) continue;            /* a silent key */
         if ((keys & bit) && !(ui.keys & bit)) {
             /* with a rhythm the chord keeps playing: the same key again stops it */
             if (set.rhythm && active && held_idx < 0 && cur_idx == (int)k) stop();
@@ -1617,6 +1648,59 @@ static void draw_bottom_text(void)       /* in the second canvas: y 0 = screen r
 }
 
 
+/* ---- the minimal screen: black, white text, thin frames. The set's chords as tiles (the one playing filled), the
+ * chord playing big below. bottom = 0: the upper canvas (screen rows 0..119), 1: the lower (120..239). */
+static void box(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
+{
+    cv_rect(x, y, w, 1, c); cv_rect(x, y + h - 1, w, 1, c);
+    cv_rect(x, y, 1, h, c); cv_rect(x + w - 1, y, 1, h, c);
+}
+
+static void draw_screen(int bottom)
+{
+    const uint16_t W = RGB(255, 255, 255), K = RGB(0, 0, 0), G = RGB(150, 148, 160), D = RGB(64, 62, 74);
+    int n = grid_n[set.grid], cs = -1, cvar = 0, i;
+    uint32_t now = plat_ms();
+    char b[20], t[24];
+    cv_rect(0, 0, 240, 120, K);
+    if (active && cur_idx >= 0) { int o; cs = key_slot(cur_idx, &cvar, &o); }
+    if (bottom) {
+        const char *r = RICH_NAME[set.rich];
+        if (active) cv_text(8, 6, &FONT_L, chord_txt, W);
+        cv_text(8, 40, &FONT_XS, SOUND_NAME[set.sound], G);
+        cv_text(232 - text_w(&FONT_XS, r), 40, &FONT_XS, r, G);
+        return;
+    }
+    if (now < ui.msg_until) {                                   /* a message (SET ..., OCTAVE ...) takes the header's place */
+        int32_t x = cv_text(8, 0, &FONT_XS, ui.msg[0], W);
+        cv_text(x + 6, 0, &FONT_XS, ui.msg[1], G);
+    } else {
+        cv_text(8, 0, &FONT_XS, GRID_DEF[set.grid].name, W);
+        cv_text(8, 10, &FONT_XS, GRID_DEF[set.grid].by, G);
+        t[0] = 0; text_cat(t, "KEY "); text_cat(t, NOTE[set.key]);
+        cv_text(232 - text_w(&FONT_XS, t), 0, &FONT_XS, t, W);
+    }
+    cv_rect(8, 22, 224, 1, D);
+    for (i = 0; i < n; i++) {
+        int one = n <= 4, sel = i == cs;
+        int32_t x = 6 + (one ? i : i % 4) * 58, y = one ? 32 : 28 + (i / 4) * 45, w = 54, h = one ? 62 : 41, tw, fh;
+        const felucca_font_t *f = &FONT_L;
+        chord_t c = slot_chord(i, 0, 0);
+        const char *s;
+        chord_name(&c, b);
+        s = sel ? chord_txt : b;                                /* the tile shows what plays (the variant's name too) */
+        if (text_w(f, s) > w - 6) f = &FONT_S;
+        tw = text_w(f, s);
+        fh = f == &FONT_L ? 24 : 14;
+        if (sel) cv_rect(x, y, w, h, W); else box(x, y, w, h, D);
+        t[0] = (char)('1' + i); t[1] = 0;
+        cv_text(x + 4, y + 3, &FONT_XS, t, sel ? K : G);
+        if (sel && cvar) cv_text(x + w - 12, y + 3, &FONT_XS, "+", K);
+        cv_text(x + (w - tw) / 2, y + (h - fh) / 2 + 3, f, s, sel ? K : W);
+    }
+}
+
+
 /* the first screen at boot (the platform's splash, while the FM-1 starts): the intro's first picture,
  * BLOP in its lights over the dark water, so the start runs on without a flash */
 void app_splash(void)
@@ -1651,14 +1735,17 @@ void app_frame(void)
         if (dt > 0.1f) dt = 0.1f;
         ui.frame_at = now;
         scene_step(now, dt);
-        cv_begin(240, 120, 0);
-        draw_cells(0);
-        if (sc.title < 0.5f && !ui.clean) draw_top_text();
-        cv_blit(0, 0);
-        cv_begin(240, 120, 0);
-        draw_cells(40);
-        if (sc.title < 0.5f && !ui.clean) draw_bottom_text();
-        cv_blit(0, 120);
+        {
+            int over = sc.title < 0.5f;     /* the minimal screen; the intro and the help keep the old picture */
+            cv_begin(240, 120, 0);
+            if (over) draw_screen(0);
+            else { draw_cells(0); if (sc.title < 0.5f && !ui.clean) draw_top_text(); }
+            cv_blit(0, 0);
+            cv_begin(240, 120, 0);
+            if (over) { draw_screen(1); if (!ui.clean) draw_bottom_text(); }
+            else draw_cells(40);
+            cv_blit(0, 120);
+        }
     }
     ann_tick(now);
 }

@@ -20,9 +20,9 @@ key 7 up
 wait 30
 expect active 0
 # a grid, a rhythm: the chord keeps playing (latch); the drums from the main page's K4 (kick only at first)
-turn SELECT 2
+turn SELECT 3
 wait 30
-expect grid 2
+expect grid 3
 turn ALGO 8
 wait 30
 expect rhythm 8
@@ -241,7 +241,7 @@ wait 4500
 expect dirty 0
 reboot
 wait 600
-expect grid 2
+expect grid 3
 expect sound 1
 expect page 0
 # HOME + REC held 3 s: the first settings back (let go before: nothing)

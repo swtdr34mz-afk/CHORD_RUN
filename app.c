@@ -458,6 +458,7 @@ static float vis_pitch(int i, uint32_t now)
     return vis[i].from + (vis[i].to - vis[i].from) * k;
 }
 
+static uint32_t hop_at;
 static void play(int idx)
 {
     chord_t c = build_chord(idx);
@@ -474,6 +475,7 @@ static void play(int idx)
     }
     vis[4].from = vis_pitch(4, now); vis[4].to = bass; vis[4].t0 = now; vis[4].dur = (uint32_t)(g * 1000.0f);
     cur_idx = idx;
+    hop_at = now;
     { int v, o; last_slot = key_slot(idx, &v, &o); }
     active = 1;
     eng_chord(notes, bass, glide_s());
@@ -498,8 +500,8 @@ static void rechord(void)
 enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, NPAGE };
 static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS"};
 static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO};
-static const uint8_t PAGE_RGB[NPAGE][3] = {{255, 150, 220}, {190, 150, 255}, {120, 230, 255}, {255, 214, 110},
-                                          {140, 240, 150}, {235, 235, 240}, {255, 140, 100}};
+static const uint8_t PAGE_RGB[NPAGE][3] = {{200, 255, 60}, {120, 200, 255}, {255, 190, 90}, {255, 120, 90},
+                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}};
 
 enum { KD_PCT, KD_OFF, KD_GLIDE, KD_BPM, KD_BIP, KD_LIST };
 enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL, G_MELODY };
@@ -531,7 +533,7 @@ static int settings_ok(void)
 {
     int p, k;
     if (set.magic != SET_MAGIC || set.grid >= NGRID || set.octave < -2 || set.octave > 2 || set.sound >= NSOUND
-        || set.rhythm >= NRHYTHM || set.page >= NPAGE)
+        || set.rhythm >= NRHYTHM || set.page >= NPAGE || set.rsv[0] >= 10)
         return 0;
     for (p = 0; p < NPAGE; p++)
         for (k = 0; k < 4; k++)
@@ -701,6 +703,7 @@ static void encoder(int k, int32_t e)
     dirty();
 }
 
+static const char *const CHR_NAME_B[10] = {"CUBE", "DIAMOND", "SPIKE", "ORB", "HEXAGON", "CROSS", "STAR", "ARROW", "RING", "HOURGLASS"};
 static void button(int k)
 {
     char t[8];
@@ -721,7 +724,12 @@ static void button(int k)
         if ((ui.btn >> B_HOME) & 1u) return;      /* HOME + REC: the reset (input), not food */
         fun(k);
         return;
-    case B_ARP: case B_SEQ: case B_PLAY: fun(k); return;
+    case B_SEQ:                                  /* the character that runs: the next one */
+        set.rsv[0] = (uint8_t)((set.rsv[0] + 1u) % 10u);
+        app_say("CHARACTER", CHR_NAME_B[set.rsv[0]]);
+        hop_at = plat_ms();
+        break;
+    case B_ARP: case B_PLAY: fun(k); return;
     case B_OCTDN:
     case B_OCTUP:
         set.octave = (int8_t)clamp(set.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
@@ -754,7 +762,7 @@ static void input(void)
         uint32_t bit = 1u << k;
         if (kb_white[k] < 0) continue;
         if ((keys & bit) && !(ui.keys & bit)) {
-            ld_held |= bit; ld_cur = (int)k; eng_lead(mel_pitch(kb_white[k]));
+            ld_held |= bit; ld_cur = (int)k; hop_at = now; eng_lead(mel_pitch(kb_white[k]));
         } else if (!(keys & bit) && (ui.keys & bit)) {
             ld_held &= ~bit;
             if (ld_cur == (int)k) {
@@ -1717,6 +1725,8 @@ static void draw_bottom_text(void)       /* in the second canvas: y 0 = screen r
     int32_t y0 = 189 - 120, tw = text_w(&FONT_T, PAGE_NAME[set.page]) + 10;
     uint16_t pc = page_col();
     char t[32];
+    cv_rect(0, y0 - 3, 240, 60, RGB(5, 9, 11));
+    cv_rect(0, y0 - 3, 240, 1, RGB(70, 96, 104));
     cv_rect(6, y0 + 1, tw, 13, pc);
     cv_text(11, y0 + 1, &FONT_T, PAGE_NAME[set.page], RGB(0, 0, 0));
     t[0] = 0;
@@ -1731,14 +1741,212 @@ static void draw_bottom_text(void)       /* in the second canvas: y 0 = screen r
         const felucca_font_t *vf = text_w(&FONT_S, v) <= 56 ? &FONT_S : &FONT_T;
         cv_text(x, y0 + 15, &FONT_T, d->lab, RGB(190, 186, 200));
         cv_text(x, y0 + 28 + (vf == &FONT_T ? 2 : 0), vf, v, RGB(250, 248, 252));
-        cv_rect(x, y0 + 47, 52, 2, RGB(60, 58, 70));
+        cv_rect(x, y0 + 47, 52, 2, RGB(30, 44, 50));
         cv_rect(x, y0 + 47, (int32_t)(52.0f * f + 0.5f), 2, pc);
     }
 }
 
 
-/* ---- the minimal screen: black, white text, thin frames. The set's chords as tiles (the one playing filled), the
- * chord playing big below. bottom = 0: the upper canvas (screen rows 0..119), 1: the lower (120..239). */
+/* ===================================================================================================== 2027 look ===
+ * A picture behind everything: a deep petrol-to-ember sky with drifting dust, pulsing rings of an orbiting sphere, a dot-matrix
+ * floor (intro) and a little runner: a geometric character that hops over spikes and blocks, and when a chord is played. All drawn from
+ * rectangles; (x, y) in screen rows 0..239, g_oy = the screen row of the canvas' first row (0 or 120). */
+static int g_oy;
+#define NSR(x, y, w, h, c) cv_rect((x), (y) - g_oy, (w), (h), (c))
+#define NPS(x, y, c) cv_rect((x), (y) - g_oy, 1, 1, (c))
+#define HY 184                                                    /* the horizon of the main screen (just above the info panel) */
+#define ACC1 RGB(200, 255, 60)                                  /* acid lime */
+#define ACC2 RGB(255, 110, 80)                                  /* coral */
+#define SOFT RGB(150, 172, 182)                                 /* cool grey */
+
+static int isqrt_i(int v) { int r = 0; while ((r + 1) * (r + 1) <= v) r++; return r; }
+static float ease3(float k) { k = clamp01(k); return 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k); }
+
+static void neon_sky(int hy, uint32_t now)
+{
+    int y, i;
+    for (y = 0; y < hy; y += 3) {
+        int k = y * 255 / hy, r, g, b, h = hy - y < 3 ? hy - y : 3;
+        if (y + h <= g_oy || y >= g_oy + 120) continue;
+        if (k < 140) { r = 4 + 6 * k / 140; g = 6 + 30 * k / 140; b = 10 + 36 * k / 140; }
+        else { r = 10 + 170 * (k - 140) / 115; g = 36 + 56 * (k - 140) / 115; b = 46 + 18 * (k - 140) / 115; }
+        NSR(0, y, 240, h, RGB(r, g, b));
+    }
+    for (i = 0; i < 22; i++) {                                    /* stars, a few twinkle */
+        int x = (i * 97 + 13) % 236 + 2, sy = (i * 53 + 7) % (hy * 2 / 3);
+        int tw = ((now / 260u) + (uint32_t)i * 7u) % 6u == 0u;
+        if (sy + 2 <= g_oy || sy >= g_oy + 120) continue;
+        NSR(x, sy, tw ? 2 : 1, tw ? 2 : 1, tw ? RGB(235, 255, 200) : RGB(90, 116, 124));
+    }
+}
+
+/* the orb: a glowing core and thin rings that breathe (centre cx, ccy; radius r), cut at the horizon hy */
+static void neon_sun(int cx, int ccy, int r, int hy, uint32_t now)
+{
+    int ring, y;
+    int core = r / 3 + (int)(2.0f * fm_sin_turns((float)(now % 3000u) / 3000.0f));
+    for (y = ccy - core; y < ccy + core && y < hy; y++) {                 /* the core */
+        int dy = y - ccy, half = isqrt_i(core * core - dy * dy);
+        if (y + 1 <= g_oy || y >= g_oy + 120) continue;
+        NSR(cx - half, y, 2 * half, 1, RGB(255, 170 - 60 * (y - ccy + core) / (2 * core), 110));
+    }
+    for (ring = 0; ring < 3; ring++) {
+        int rr = r * (ring + 2) / 4 + (int)(2.5f * fm_sin_turns((float)((now + (uint32_t)ring * 900u) % 4000u) / 4000.0f));
+        uint16_t c = ring == 0 ? RGB(200, 255, 60) : ring == 1 ? RGB(110, 150, 50) : RGB(60, 84, 50);
+        for (y = ccy - rr; y <= ccy + rr && y < hy; y++) {
+            int dy = y - ccy, ho = isqrt_i(rr * rr - dy * dy), hi = rr - dy * dy / (rr ? rr : 1) > 0 ? isqrt_i((rr - 2) * (rr - 2) - dy * dy) : 0;
+            if (y + 1 <= g_oy || y >= g_oy + 120) continue;
+            if (dy * dy > (rr - 2) * (rr - 2)) NSR(cx - ho, y, 2 * ho, 1, c);
+            else { NSR(cx - ho, y, ho - hi, 1, c); NSR(cx + hi, y, ho - hi, 1, c); }
+        }
+    }
+}
+
+/* the dot-matrix floor of the intro: rows of dots that rush towards us and spread out */
+static void neon_floor(int hy, int bot, uint32_t now)
+{
+    int i, j, y, H = bot - hy;
+    float fr = (float)(now % 900u) / 900.0f;
+    NSR(0, hy, 240, H, RGB(5, 11, 13));
+    for (i = 0; i < 10; i++) {
+        float p = ((float)i + fr) / 10.0f;
+        int sp, n2, d;
+        y = hy + 2 + (int)(p * p * (float)(H - 2));
+        if (y >= bot) continue;
+        sp = 5 + (int)(p * 26.0f);
+        d = p > 0.55f ? 2 : 1;
+        for (j = -14; j <= 14; j++) {
+            int x = 120 + j * sp;
+            n2 = (int)(40.0f + 190.0f * p);
+            if (x < 0 || x > 239) continue;
+            NSR(x, y, d, d, RGB(n2 * 4 / 5, n2, n2 / 4));
+        }
+    }
+    NSR(0, hy, 240, 1, RGB(150, 172, 182));
+}
+
+/* ---- the characters: 10 original shapes (no game's characters): inside(kind, x, y) in the shape's own pixels */
+#define NCHR 10
+static const char *const CHR_NAME[NCHR] = {"CUBE", "DIAMOND", "SPIKE", "ORB", "HEXAGON", "CROSS", "STAR", "ARROW", "RING", "HOURGLASS"};
+static const uint8_t CHR_COL[NCHR][3] = {{200, 255, 60}, {255, 110, 80}, {120, 200, 255}, {255, 190, 90}, {110, 240, 190},
+                                         {236, 230, 214}, {255, 150, 120}, {90, 170, 230}, {210, 170, 255}, {160, 255, 150}};
+static int chr_in(int kind, float x, float y)
+{
+    float ax = fm_fabsf(x), ay = fm_fabsf(y), r2 = x * x + y * y;
+    switch (kind) {
+    case 0: return ax <= 6.5f && ay <= 6.5f;
+    case 1: return ax + ay <= 9.0f;
+    case 2: return y >= -8.0f && y <= 6.5f && ax <= (y + 8.0f) * 0.5f;
+    case 3: return r2 <= 49.0f;
+    case 4: return ay <= 6.5f && ax + ay * 0.5774f <= 7.5f;
+    case 5: return (ax <= 2.6f && ay <= 8.0f) || (ay <= 2.6f && ax <= 8.0f);
+    case 6: return ax * ay <= 6.0f && ax + ay <= 10.0f;
+    case 7: return (x >= -8.0f && x <= 0.0f && ay <= 2.6f) || (x > 0.0f && x <= 8.0f && ay <= (8.0f - x) * 0.9f);
+    case 8: return r2 >= 20.0f && r2 <= 56.0f;
+    default: return ay <= 7.5f && ax <= ay * 0.9f + 0.8f;
+    }
+}
+
+static void neon_char(int kind, int cx, int cy, float ang)
+{
+    float c = fm_sin_turns(ang * 0.15915494f + 0.25f), s = fm_sin_turns(ang * 0.15915494f);
+    const uint8_t *fc = CHR_COL[kind];
+    int dx, dy;
+    for (dy = -11; dy <= 11; dy++)
+        for (dx = -11; dx <= 11; dx++) {
+            float lx = (float)dx * c + (float)dy * s, ly = -(float)dx * s + (float)dy * c;
+            if (!chr_in(kind, lx, ly)) continue;
+            if (!(chr_in(kind, lx + 1.3f, ly) && chr_in(kind, lx - 1.3f, ly) && chr_in(kind, lx, ly + 1.3f) && chr_in(kind, lx, ly - 1.3f)))
+                NPS(cx + dx, cy + dy, RGB(245, 250, 238));
+            else if (fm_fabsf(lx) < 1.6f && fm_fabsf(ly) < 1.6f) NPS(cx + dx, cy + dy, RGB(8, 14, 16));
+            else NPS(cx + dx, cy + dy, RGB(fc[0], fc[1], fc[2]));
+        }
+}
+
+static void neon_spike(int x, int gy)
+{
+    int r;
+    for (r = 0; r < 11; r++) {
+        int w = 1 + r * 11 / 10;
+        NSR(x + 6 - w / 2, gy - 11 + r, w, 1, r < 3 ? RGB(255, 190, 160) : ACC2);
+    }
+}
+static void neon_block(int x, int gy)
+{
+    NSR(x, gy - 12, 12, 12, RGB(10, 22, 26));
+    NSR(x, gy - 12, 12, 1, ACC1); NSR(x, gy - 1, 12, 1, ACC1);
+    NSR(x, gy - 12, 1, 12, ACC1); NSR(x + 11, gy - 12, 1, 12, ACC1);
+    NSR(x + 4, gy - 8, 4, 4, RGB(90, 120, 40));
+}
+
+static const struct { uint8_t type; int16_t x; } OBST[5] = {{0, 40}, {0, 56}, {1, 130}, {0, 200}, {1, 262}};
+
+/* the runner: the ground at row gy, the character at column cx; speed in pixels per second, obstacles scroll left, the
+ * character hops over each one (and when a chord is played) */
+static void neon_runner(int gy, int cx, int speed, int with_obst, uint32_t now)
+{
+    int i, wo = (int)((now * (uint32_t)speed) / 1000u), per = 300;
+    float h = 0.0f, ang = 0.0f;
+    uint32_t u = now - hop_at;
+    NSR(0, gy, 240, 2, ACC1);
+    NSR(0, gy + 2, 240, 1, RGB(60, 84, 90));
+    if (with_obst)
+        for (i = 0; i < 5; i++) {
+            int x = ((OBST[i].x - wo) % per + per) % per - 40, ox = x + 6, d = ox - cx;
+            if (OBST[i].type == 0) neon_spike(x, gy); else neon_block(x, gy);
+            if (d > -24 && d < 24) {
+                float k = 1.0f - (float)(d * d) / 576.0f, a = (float)(24 - d) / 48.0f * 1.5708f;
+                if (k * 19.0f > h) { h = k * 19.0f; ang = a; }
+            }
+        }
+    if (u < 420u) {
+        float k = (float)u / 420.0f, hh = 15.0f * fm_sin_turns(k * 0.5f);
+        if (hh > h) { h = hh; ang = k * 1.5708f; }
+    }
+    if (h < 0.5f) { ang = 0.0f; h = 0.0f; }
+    for (i = 1; i <= 3; i++) NSR(cx - 9 - i * 6, gy - 4 - (int)(h * 0.0f), 3, 3, i == 1 ? RGB(170, 220, 60) : i == 2 ? RGB(100, 140, 50) : RGB(50, 70, 40));
+    neon_char(set.rsv[0] < NCHR ? set.rsv[0] : 0, cx, gy - 8 - (int)(h + 0.5f), ang);
+}
+
+/* ---- the intro (and the help: HOME held): the sun rises, the title drops in, the floor rushes, the runner crosses */
+static void neon_splash(int bottom)
+{
+    const int hy = 150;
+    float ms = sc.title_ms, e = ease3((ms - 100.0f) / 1100.0f);
+    uint32_t now = plat_ms(), t = (uint32_t)(ms < 0.0f ? 0.0f : ms);
+    int ty, cx;
+    char ln[24];
+    g_oy = bottom ? 120 : 0;
+    neon_sky(hy, now);
+    neon_sun(120, hy - 12 + (int)((1.0f - e) * 80.0f), 52, hy, now);
+    neon_floor(hy, 240, now);
+    cx = (int)(-20.0f + ms * 0.115f);
+    if (cx > 270) cx = 270;
+    neon_runner(214, cx, 0, 0, now);
+    if (ms > 1500.0f && ms < 2300.0f && cx > 60) {}                    /* (the runner just crosses) */
+    {   /* the title: two lines drop in with a bounce, in three colours (a split) */
+        float k = ease3((ms - 250.0f) / 700.0f), q = 1.0f - k;
+        const char *l1 = "CHORDS", *l2 = "2027";
+        int y1, y2, x1 = (240 - text_w(&FONT_L, l1)) / 2, x2 = (240 - text_w(&FONT_L, l2)) / 2;
+        ty = -(int)(q * 90.0f) + (int)(6.0f * fm_sin_turns(q * 1.5f) * q);
+        y1 = 22 + ty; y2 = 58 + ty;
+        cv_text(x1, y1 - g_oy, &FONT_L, l1, RGB(245, 250, 238));
+        cv_text(x2, y2 - g_oy, &FONT_L, l2, ACC1);
+        NSR(x2, y2 + 36, text_w(&FONT_L, l2), 2, ACC2);
+    }
+    if (t > 1100u) {                                                    /* the credit, the author's own words in the help */
+        NSR(0, 226, 240, 14, RGB(5, 9, 11));
+        ln[0] = 0; text_cat(ln, "BASED ON BLOP BY OBSIMO");
+        cv_text((240 - text_w(&FONT_XS, ln)) / 2, 226 - g_oy, &FONT_XS, ln, SOFT);
+    }
+    if (ui.help && t > 1900u) {
+        NSR(0, 208, 240, 16, RGB(5, 9, 11));
+        cv_text((240 - text_w(&FONT_S, "GO STREAM MY MUSIC ;)")) / 2, 208 - g_oy, &FONT_S, "GO STREAM MY MUSIC ;)", RGB(255, 214, 110));
+    }
+}
+
+/* ---- the main screen: the set's chords as neon tiles (the one playing lit), the chord playing big, the runner below.
+ * bottom = 0: the upper canvas (screen rows 0..119), 1: the lower (120..239). */
 static void box(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
 {
     cv_rect(x, y, w, 1, c); cv_rect(x, y + h - 1, w, 1, c);
@@ -1747,29 +1955,35 @@ static void box(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
 
 static void draw_screen(int bottom)
 {
-    const uint16_t W = RGB(255, 255, 255), K = RGB(0, 0, 0), G = RGB(150, 148, 160), D = RGB(64, 62, 74);
+    const uint16_t W = RGB(245, 250, 238), K = RGB(8, 14, 10), L = SOFT, PU = RGB(70, 96, 104), TB = RGB(9, 20, 25);
     int n = grid_n[set.grid], cs = -1, cvar = 0, i;
     uint32_t now = plat_ms();
     char b[20], t[24];
-    cv_rect(0, 0, 240, 120, K);
+    g_oy = bottom ? 120 : 0;
+    neon_sky(HY, now);
     if (active && cur_idx >= 0) { int o; cs = key_slot(cur_idx, &cvar, &o); }
     if (bottom) {
         const char *r = RICH_NAME[set.rich];
-        if (active) cv_text(8, 6, &FONT_L, chord_txt, W);
-        cv_text(8, 40, &FONT_XS, SOUND_NAME[set.sound], G);
-        cv_text(232 - text_w(&FONT_XS, r), 40, &FONT_XS, r, G);
+        int32_t x;
+        neon_sun(198, HY - 4, 34, HY, now);
+        neon_runner(HY - 2, 146, 60, 1, now);
+        if (active) {
+            cv_text(8, 2, &FONT_L, chord_txt, W);
+        }
+        x = cv_text(8, 36, &FONT_XS, SOUND_NAME[set.sound], L);
+        cv_text(x + 8, 36, &FONT_XS, r, ACC1);
         return;
     }
     if (now < ui.msg_until) {                                   /* a message (SET ..., OCTAVE ...) takes the header's place */
         int32_t x = cv_text(8, 0, &FONT_XS, ui.msg[0], W);
-        cv_text(x + 6, 0, &FONT_XS, ui.msg[1], G);
+        cv_text(x + 6, 0, &FONT_XS, ui.msg[1], ACC1);
     } else {
         cv_text(8, 0, &FONT_XS, GRID_DEF[set.grid].name, W);
-        cv_text(8, 10, &FONT_XS, GRID_DEF[set.grid].by, G);
+        cv_text(8, 10, &FONT_XS, GRID_DEF[set.grid].by, L);
         t[0] = 0; text_cat(t, "KEY "); text_cat(t, NOTE[set.key]);
-        cv_text(232 - text_w(&FONT_XS, t), 0, &FONT_XS, t, W);
+        cv_text(232 - text_w(&FONT_XS, t), 0, &FONT_XS, t, ACC1);
     }
-    cv_rect(8, 22, 224, 1, D);
+    cv_rect(8, 22, 224, 1, PU);
     for (i = 0; i < n; i++) {
         int one = n <= 4, sel = i == cs;
         int32_t x = 6 + (one ? i : i % 4) * 58, y = one ? 32 : 28 + (i / 4) * 45, w = 54, h = one ? 62 : 41, tw, fh;
@@ -1777,16 +1991,17 @@ static void draw_screen(int bottom)
         chord_t c = slot_chord(i, 0, 0);
         const char *s;
         chord_name(&c, b);
-        s = sel ? chord_txt : b;                                /* the tile shows what plays (the variant's name too) */
+        s = sel ? chord_txt : b;
         if (text_w(f, s) > w - 6) f = &FONT_S;
         tw = text_w(f, s);
         fh = f == &FONT_L ? 24 : 14;
-        if (sel) cv_rect(x, y, w, h, W); else box(x, y, w, h, D);
+        cv_rect(x, y, w, h, sel ? ACC1 : TB);
+        box(x, y, w, h, sel ? ACC1 : PU);
         t[0] = (char)('1' + i); t[1] = 0;
-        cv_text(x + 4, y + 3, &FONT_XS, t, sel ? K : G);
-        if (sel && cvar) cv_text(x + w - 12, y + 3, &FONT_XS, "+", K);
+        cv_text(x + 4, y + 3, &FONT_XS, t, sel ? K : L);
         cv_text(x + (w - tw) / 2, y + (h - fh) / 2 + 3, f, s, sel ? K : W);
     }
+    (void)K;
 }
 
 
@@ -1828,11 +2043,12 @@ void app_frame(void)
             int over = sc.title < 0.5f;     /* the minimal screen; the intro and the help keep the old picture */
             cv_begin(240, 120, 0);
             if (over) draw_screen(0);
-            else { draw_cells(0); if (sc.title < 0.5f && !ui.clean) draw_top_text(); }
+            else neon_splash(0);
             cv_blit(0, 0);
             cv_begin(240, 120, 0);
             if (over) { draw_screen(1); if (!ui.clean) draw_bottom_text(); }
-            else draw_cells(40);
+            else neon_splash(1);
+            (void)draw_cells; (void)draw_top_text;
             cv_blit(0, 120);
         }
     }

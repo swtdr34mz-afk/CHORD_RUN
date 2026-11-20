@@ -359,7 +359,7 @@ static void hit(float vel, float gate_s, float atk)
     E.gate_left = gate_s;
     if (atk <= 0.0f)
         atk = E.rh.hold ? p->atk : fm_minf(p->atk, 0.012f);   /* in a rhythm, attacks stay short */
-    E.atk_s = fm_maxf(1.0f, atk * SR);
+    E.atk_s = fm_maxf(0.003f * SR, atk * SR);   /* never a step: at least 3 ms */
     E.rel_s = (E.rh.hold ? p->rel : fm_minf(p->rel, 0.3f)) * SR;
     E.fenv = 1.0f;
     E.ienv = 1.0f;
@@ -367,7 +367,7 @@ static void hit(float vel, float gate_s, float atk)
     E.mvel = (uint8_t)(30.0f + 97.0f * fm_minf(1.0f, vel));
     for (i = 0; i < 4; i++) {           /* strum: the voices start one after the other, low to high */
         E.sdel[i] = E.strum * 0.032f * SR * (float)i;
-        if (E.sdel[i] > 0.0f) E.sg[i] = 0.0f;
+        if (E.sdel[i] > 0.0f) { /* the voice fades out quickly in its wait (see the voice loop), no hard cut */ }
         else {
             if (p->engine == ENGINE_PLUCK) excite(&E.v[i], p->bright);
             midi_voice_on(i);
@@ -608,13 +608,16 @@ void eng_init(void)
 static inline float rd_line(const float *b, uint32_t n, uint32_t w, float d)   /* fractional read d behind w */
 {
     float rp = (float)w - d;
-    int32_t i0;
+    int32_t i0, i1;
     float fr, a, c;
-    while (rp < 0.0f) rp += (float)n;
+    if (rp < 0.0f) rp += (float)n;           /* d is always < n: one wrap is enough (no loop, no division) */
+    if (rp < 0.0f) rp = 0.0f;
     i0 = (int32_t)rp;
     fr = rp - (float)i0;
-    a = b[(uint32_t)i0 % n];
-    c = b[(uint32_t)(i0 + 1) % n];
+    if (i0 >= (int32_t)n) i0 -= (int32_t)n;
+    i1 = i0 + 1; if (i1 >= (int32_t)n) i1 = 0;
+    a = b[i0];
+    c = b[i1];
     return a + (c - a) * fr;
 }
 
@@ -626,7 +629,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
     run_commands();
     {
         float dC = fm_expf(-1.0f / (fm_maxf(0.005f, p->dec) * SR * 0.3f));
-        float rC = fm_expf(-1.0f / (fm_maxf(0.004f, E.rel_s / SR) * SR * 0.25f));
+        float rC = fm_expf(-1.0f / (fm_maxf(0.012f, E.rel_s / SR) * SR * 0.25f));
         float fC = fm_expf(-1.0f / (fm_maxf(0.01f, p->fdec) * SR * 0.33f));
         float iC = fm_expf(-1.0f / (fm_maxf(0.01f, p->idec) * SR * 0.33f));
         const float duckC = 0.99974808f;          /* exp(-1 / (0.09 s)) */
@@ -644,7 +647,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float dry = fm_maxf(0.18f, fm_cosf(ang)), rsend = fm_sinf(ang) * 1.1f;
         const float dsend = E.del * 0.7f, cw = fm_minf(1.3f, p->chorus * 0.8f + E.chorus * 1.1f);
         const float ldC = fm_expf(-1.0f / (fm_maxf(0.005f, E.lp.dec) * SR * 0.3f));
-        const float lrC = fm_expf(-1.0f / (fm_maxf(0.004f, E.lp.rel) * SR * 0.25f));
+        const float lrC = fm_expf(-1.0f / (fm_maxf(0.02f, E.lp.rel) * SR * 0.25f));
         const float lfC = fm_expf(-1.0f / (fm_maxf(0.01f, E.lp.fdec) * SR * 0.33f));
         const float rv_damp = 0.575f;             /* ~6 kHz in the reverb's loop */
 
@@ -707,13 +710,15 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
             E.ic1 = fm_flush(E.ic1); E.ic2 = fm_flush(E.ic2); E.dl_lp = fm_flush(E.dl_lp);
             E.rv_hpl = fm_flush(E.rv_hpl); E.rv_hpr = fm_flush(E.rv_hpr); E.k_tail = fm_flush(E.k_tail);
             E.duck = fm_flush(E.duck);
+            E.ld_lp = fm_flush(E.ld_lp); E.ld_lp2 = fm_flush(E.ld_lp2); E.lr_en = fm_flush(E.lr_en);
+            for (i = 0; i < 4; i++) E.lr_lp[i] = fm_flush(E.lr_lp[i]);
             for (i = 0; i < 4; i++) { E.rv_lp[i] = fm_flush(E.rv_lp[i]); E.v[i].prev = fm_flush(E.v[i].prev); E.v[i].last = fm_flush(E.v[i].last); }
             {   /* a sound's own cutoff, moved by the knob (about 3.7 octaves each way); 0: the knob's alone */
                 float base = p->cut > 0.0f ? p->cut * E.cut * (1.0f / CUT_MID_HZ) : E.cut;
                 fc = fm_minf(SR * 0.45f, base * fm_exp2f(p->fenv * E.fenv * E.vel));
             }
             if (eng == ENGINE_PLUCK) fc = fm_minf(fc, 2400.0f);   /* plucked strings: their own ceiling, never harsh */
-            E.g = fm_tanf(3.14159265f * fc / SR);
+            E.g += (fm_tanf(3.14159265f * fc / SR) - E.g) * 0.45f;   /* smoothed: a hit's filter jump must not click */
             /* chorus taps for this chunk: 12 ms and 19 ms, +-2.8 ms */
             E.ch_ph1 += 0.31f * (float)cn / SR; if (E.ch_ph1 >= 1.0f) E.ch_ph1 -= 1.0f;
             E.ch_ph2 += 0.37f * (float)cn / SR; if (E.ch_ph2 >= 1.0f) E.ch_ph2 -= 1.0f;
@@ -745,7 +750,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     if (E.gate_left <= 0.0f) {
                         E.stage = 4;
                         midi_chord_off();
-                        rC = fm_expf(-1.0f / (fm_maxf(0.004f, E.rel_s / SR) * SR * 0.25f));
+                        rC = fm_expf(-1.0f / (fm_maxf(0.012f, E.rel_s / SR) * SR * 0.25f));
                     }
                 }
                 E.fenv *= fC;
@@ -807,8 +812,9 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         v->w = (v->w + 1u) & (KS_N - 1u);
                         vo = x;
                     }
-                    if (E.sg[i] < 1.0f) {
+                    if (E.sg[i] < 1.0f || E.sdel[i] > 0.0f) {
                         if (E.sdel[i] <= 0.0f) E.sg[i] = fm_minf(1.0f, E.sg[i] + 0.004f);
+                        else E.sg[i] = fm_maxf(0.0f, E.sg[i] - 0.01f);
                         vo *= E.sg[i];
                     }
                     sum += vo;
@@ -927,9 +933,9 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     float g = 0.62f + 0.34f * E.lrev, x = ldo * 1.0f + 1e-15f, yv[4], sum, wet = E.lrev > 0.001f ? 0.25f + 0.75f * E.lrev : 0.0f, o, d;
                     uint32_t k;
                     d = lr_ap0[E.lr_apw0]; o = d - 0.6f * x; lr_ap0[E.lr_apw0] = x + 0.6f * o; x = o;
-                    E.lr_apw0 = (E.lr_apw0 + 1u) % 113u;
+                    if (++E.lr_apw0 >= 113u) E.lr_apw0 = 0u;
                     d = lr_ap1[E.lr_apw1]; o = d - 0.6f * x; lr_ap1[E.lr_apw1] = x + 0.6f * o; x = o;
-                    E.lr_apw1 = (E.lr_apw1 + 1u) % 337u;
+                    if (++E.lr_apw1 >= 337u) E.lr_apw1 = 0u;
                     for (k = 0; k < 4u; k++) {
                         float tri;
                         E.lr_ph[k] += (0.21f + 0.07f * (float)k) / SR;
@@ -942,7 +948,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     sum = (yv[0] + yv[1] + yv[2] + yv[3]) * 0.5f;
                     for (k = 0; k < 4u; k++) {
                         lr_line[k][E.lr_w[k]] = (yv[k] - sum) * g + x;
-                        E.lr_w[k] = (E.lr_w[k] + 1u) % LR_N;
+                        if (++E.lr_w[k] >= LR_N) E.lr_w[k] = 0u;
                     }
                     lrl = (yv[0] + yv[2]) * 0.5f * wet;
                     lrr = (yv[1] + yv[3]) * 0.5f * wet;
@@ -950,13 +956,14 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 }
                 /* ping-pong delay (16-bit lines) */
                 {
-                    uint32_t rp = (E.dl_w + DL_N - (uint32_t)E.dl_time) % DL_N;
+                    uint32_t rp = E.dl_w + DL_N - (uint32_t)E.dl_time;
+                    if (rp >= DL_N) rp -= DL_N;
                     float dlo = (float)dl_buf[0][rp] * (1.0f / 32767.0f), dro = (float)dl_buf[1][rp] * (1.0f / 32767.0f);
                     float in = (l + r) * 0.5f * dsend;
                     E.dl_lp += 0.36f * (dro - E.dl_lp);          /* ~3.2 kHz in the feedback */
                     dl_buf[0][E.dl_w] = (int16_t)(fm_clampf(in + 0.42f * E.dl_lp, -1.0f, 1.0f) * 32767.0f);
                     dl_buf[1][E.dl_w] = (int16_t)(fm_clampf(dlo, -1.0f, 1.0f) * 32767.0f);
-                    E.dl_w = (E.dl_w + 1u) % DL_N;
+                    if (++E.dl_w >= DL_N) E.dl_w = 0u;
                     dlo *= 0.8f; dro *= 0.8f;
                     /* reverb: pre-delay, 4 allpass diffusers, 4-line feedback network (Householder) */
                     {
@@ -964,12 +971,12 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         float pre = rv_pre[E.pre_w];
                         uint32_t k;
                         rv_pre[E.pre_w] = x;
-                        E.pre_w = (E.pre_w + 1u) % RV_PRE;
+                        if (++E.pre_w >= RV_PRE) E.pre_w = 0u;
                         x = pre;
                         for (k = 0; k < 4u; k++) {
                             float *ab = ap_buf[k], d = ab[E.ap_w[k]], o = d - 0.7f * x;
                             ab[E.ap_w[k]] = x + 0.7f * o;
-                            E.ap_w[k] = (E.ap_w[k] + 1u) % AP_LEN[k];
+                            if (++E.ap_w[k] >= AP_LEN[k]) E.ap_w[k] = 0u;
                             x = o;
                         }
                         for (k = 0; k < 4u; k++) {
@@ -981,7 +988,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         sumy *= 0.5f;
                         for (k = 0; k < 4u; k++) {
                             rv_line[k][E.rv_w[k]] = (yl[k] - sumy) * E.rv_g[k] + x;
-                            E.rv_w[k] = (E.rv_w[k] + 1u) % RV_LEN[k];
+                            if (++E.rv_w[k] >= RV_LEN[k]) E.rv_w[k] = 0u;
                         }
                         ol = (yl[0] + yl[2]) * 0.6f;
                         orr = (yl[1] + yl[3]) * 0.6f;

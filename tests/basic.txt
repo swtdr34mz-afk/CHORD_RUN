@@ -8,15 +8,15 @@ expect delay 0
 expect reverb 22
 expect page 0
 # rhythm OFF: the chord plays only while the key is down
-key 7 down
+key 1 down
 wait 40
 expect active 1
-expect chord 7
+expect chord 1
 wav hold_pop.wav
 wait 1500
 wavstop
 shot chord.png
-key 7 up
+key 1 up
 wait 30
 expect active 0
 # a grid, a rhythm: the chord keeps playing (latch); the drums from the main page's K4 (kick only at first)
@@ -39,9 +39,9 @@ wait 30
 expect drums 15
 turn K4 12
 wait 30
-key 9 down
+key 3 down
 wait 20
-key 9 up
+key 3 up
 wait 40
 expect active 1
 wav rhythm_drums.wav
@@ -52,21 +52,21 @@ shot kick.png
 wait 1883
 wavstop
 # the same key again: stop; another key: plays
-key 9 down
+key 3 down
 wait 20
-key 9 up
+key 3 up
 wait 30
 expect active 0
-key 12 down
+key 8 down
 wait 20
-key 12 up
+key 8 up
 wait 400
-key 14 down
+key 10 down
 wait 20
-key 14 up
+key 10 up
 wait 30
 expect active 1
-expect chord 14
+expect chord 10
 # pages: a page button, the same again = back to the main page
 tap FX
 wait 30
@@ -207,9 +207,9 @@ wait 80
 expect help 0
 expect bowl 0
 # stop, back to no rhythm: it sleeps
-key 14 down
+key 10 down
 wait 20
-key 14 up
+key 10 up
 wait 30
 expect active 0
 turn ALGO -8
@@ -222,20 +222,28 @@ expect sound 9
 tap SEL
 turn K4 10
 tap SEL
-key 7 down
+key 1 down
 wait 20
 wav pluck_strum.wav
 wait 1200
 wavstop
-key 7 up
+key 1 up
 turn PRESET -8
 wait 30
-key 11 down
+key 5 down
 wav fm.wav
 wait 1200
 wavstop
-key 11 up
+key 5 up
 wait 30
+# a white key plays the melody voice (no chord)
+key 7 down
+wait 60
+expect lead 1
+expect active 0
+key 7 up
+wait 60
+expect lead 0
 # settings save themselves 4 s after the last change (no chord playing)
 wait 4500
 expect dirty 0

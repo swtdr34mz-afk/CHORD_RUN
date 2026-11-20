@@ -54,6 +54,9 @@ void eng_sound(const sound_t *p);
 void eng_rhythm(const rhythm_t *r);
 void eng_chord(const float notes[4], float bass, float glide_s);
 void eng_stop(void);
+void eng_lead_sound(const sound_t *p);                      /* the melody voice's own sound */
+void eng_lead_params(float cut_hz, float level, float reverb);   /* its cutoff (Hz), level (1 = as the sound), reverb send 0..1 */
+void eng_lead(float m);               /* the melody voice: a MIDI pitch = note on, negative = release */
 /* an outside MIDI clock's beat: the even step STEP (0..15) began at AT_MS (plat_ms); STEP -1: the clock is gone */
 void eng_sync(int step, uint32_t at_ms);
 /* side: sidechain amount 0..1; drums_on: the drum kit plays while chords play (its kicks pump the sidechain) */

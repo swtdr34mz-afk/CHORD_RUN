@@ -38,7 +38,7 @@ static float *const ap_buf[4] = {ap_buf0, ap_buf1, ap_buf2, ap_buf3};
 
 /* ------------------------------------------------------------------ command queue (main loop -> render) --- */
 enum { CMD_SOUND, CMD_RHYTHM, CMD_CHORD, CMD_STOP, CMD_PARAMS, CMD_FX, CMD_GROOVE, CMD_DRUMS, CMD_BASS, CMD_MUFFLE,
-       CMD_BLIP, CMD_PANIC, CMD_SYNC };
+       CMD_BLIP, CMD_PANIC, CMD_SYNC, CMD_LEAD, CMD_LSOUND, CMD_LPARAM };
 typedef struct {
     uint8_t t;
     union {
@@ -53,6 +53,9 @@ typedef struct {
         struct { drums_t d; float k, h, r; } d;
         struct { uint8_t sound, motif; float level, cut; } b;
         struct { int step; uint32_t at_ms; } y;   /* step: -1 = the clock is gone */
+        struct { float m; } ld;
+        sound_t ls;
+        struct { float cut, lev, rev; } lq;
     } u;
 } cmd_t;
 #define QN 16u
@@ -132,6 +135,11 @@ static struct {
     volatile int last_hit;
     volatile uint32_t last_hit_ms;
     float level;
+    /* the melody (lead) voice: mono, the sound's own oscillators, envelope and filter */
+    float ld_m, ld_ph1, ld_ph2, ld_e, ld_fe, ld_lp;
+    uint8_t ld_st;       /* 0 off, 1 attack, 2 decay / sustain, 3 release */
+    sound_t lp;          /* the melody's sound, cutoff (Hz), level, reverb send */
+    float lcut, llev, lrev;
 } E;
 
 static inline float mtof(float m) { return 440.0f * fm_exp2f((m - 69.0f) * (1.0f / 12.0f)); }
@@ -176,6 +184,14 @@ void eng_chord(const float notes[4], float bass, float glide_s)
     push(&c);
 }
 void eng_stop(void) { cmd_t c; c.t = CMD_STOP; push(&c); }
+void eng_lead_sound(const sound_t *p) { cmd_t c; c.t = CMD_LSOUND; c.u.ls = *p; push(&c); }
+void eng_lead_params(float cut_hz, float level, float reverb)
+{
+    cmd_t c;
+    c.t = CMD_LPARAM; c.u.lq.cut = cut_hz; c.u.lq.lev = level; c.u.lq.rev = reverb;
+    push(&c);
+}
+void eng_lead(float m) { cmd_t c; c.t = CMD_LEAD; c.u.ld.m = m; push(&c); }
 void eng_sync(int step, uint32_t at_ms) { cmd_t c; c.t = CMD_SYNC; c.u.y.step = step; c.u.y.at_ms = at_ms; push(&c); }
 void eng_panic(void) { cmd_t c; c.t = CMD_PANIC; push(&c); }
 void eng_params(float bpm, float cut_hz, float q, float side, int drums_on)
@@ -518,7 +534,13 @@ static void run_commands(void)
             check_run();
             break;
         }
-        case CMD_PANIC: E.active = 0; E.running = 0; E.e = 0.0f; E.stage = 0; midi_chord_off(); midi_bass_off(); break;
+        case CMD_LSOUND: E.lp = c->u.ls; break;
+        case CMD_LPARAM: E.lcut = c->u.lq.cut; E.llev = c->u.lq.lev; E.lrev = c->u.lq.rev; break;
+        case CMD_LEAD:
+            if (c->u.ld.m < 0.0f) { if (E.ld_st) E.ld_st = 3; }
+            else { E.ld_m = c->u.ld.m; E.ld_st = 1; E.ld_fe = 1.0f; }
+            break;
+        case CMD_PANIC: E.ld_st = 0; E.ld_e = 0.0f; E.active = 0; E.running = 0; E.e = 0.0f; E.stage = 0; midi_chord_off(); midi_bass_off(); break;
         case CMD_SYNC: {    /* a beat of the outside clock: step (even) began at_ms (plat_ms) */
             int st = c->u.y.step;
             float a, len;
@@ -612,14 +634,25 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float ang = E.rev * 1.5707963f;
         const float dry = fm_maxf(0.18f, fm_cosf(ang)), rsend = fm_sinf(ang) * 1.1f;
         const float dsend = E.del * 0.7f, cw = fm_minf(1.3f, p->chorus * 0.8f + E.chorus * 1.1f);
+        const float ldC = fm_expf(-1.0f / (fm_maxf(0.005f, E.lp.dec) * SR * 0.3f));
+        const float lrC = fm_expf(-1.0f / (fm_maxf(0.004f, E.lp.rel) * SR * 0.25f));
+        const float lfC = fm_expf(-1.0f / (fm_maxf(0.01f, E.lp.fdec) * SR * 0.33f));
         const float rv_damp = 0.575f;             /* ~6 kHz in the reverb's loop */
 
         for (c0 = 0; c0 < n; c0 += CHUNK) {
             uint32_t cn = n - c0 < CHUNK ? n - c0 : CHUNK;
             float inc1[4], inc2[4], incc[4], incm[4], ksL[4], binc;
+            float ldi1 = 0.0f, ldi2 = 0.0f, lda = 0.0f, ldo = 0.0f;      /* the melody voice, per chunk: phase steps, filter coefficient */
             float wob = p->wob * 0.01f * fm_sin_turns(E.wob_ph), fc, ch1, ch2;
             E.wob_ph += p->wob_rate * (float)cn / SR;
             if (E.wob_ph >= 1.0f) E.wob_ph -= 1.0f;
+            if (E.ld_st) {
+                float lb = E.lp.cut > 0.0f ? E.lp.cut * E.lcut * (1.0f / CUT_MID_HZ) : E.lcut;
+                float lfc = fm_minf(SR * 0.45f, lb * fm_exp2f(E.lp.fenv * E.ld_fe));
+                ldi1 = mtof(E.ld_m - E.lp.det * 0.005f) / SR;
+                ldi2 = mtof(E.ld_m + E.lp.oct2 + E.lp.det * 0.005f) / SR;
+                lda = fm_minf(0.95f, 6.2831853f * lfc / SR);
+            }
             for (i = 0; i < 4; i++) {           /* pitches for this chunk */
                 voice_t *v = &E.v[i];
                 float m;
@@ -865,6 +898,20 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     r = y + 0.2f * t1 + 0.98f * t2;
                 }
                 E.ch_w = (E.ch_w + 1u) & (CH_N - 1u);
+                ldo = 0.0f;
+                if (E.ld_st) {                    /* the melody voice (white keys): its own sound, level and reverb send */
+                    const sound_t *q = &E.lp;
+                    float lv;
+                    E.ld_ph1 += ldi1; if (E.ld_ph1 >= 1.0f) E.ld_ph1 -= 1.0f;
+                    E.ld_ph2 += ldi2; if (E.ld_ph2 >= 1.0f) E.ld_ph2 -= 1.0f;
+                    lv = osc(q->w1, E.ld_ph1, ldi1) + q->mix2 * osc(q->w2, E.ld_ph2, ldi2);
+                    E.ld_lp += lda * (lv - E.ld_lp);
+                    if (E.ld_st == 1) { E.ld_e += 1.0f / (fm_maxf(0.003f, fm_minf(q->atk, 0.12f)) * SR); if (E.ld_e >= 1.0f) { E.ld_e = 1.0f; E.ld_st = 2; } }
+                    else if (E.ld_st == 2) { E.ld_e = q->sus + (E.ld_e - q->sus) * ldC; if (q->sus < 0.001f && E.ld_e < 1e-4f) { E.ld_e = 0.0f; E.ld_st = 0; } }
+                    else { E.ld_e *= lrC; if (E.ld_e < 1e-4f) { E.ld_e = 0.0f; E.ld_st = 0; } }
+                    E.ld_fe *= lfC;
+                    ldo = E.ld_lp * E.ld_e * q->level * 0.176f * E.llev;
+                }
                 /* ping-pong delay (16-bit lines) */
                 {
                     uint32_t rp = (E.dl_w + DL_N - (uint32_t)E.dl_time) % DL_N;
@@ -877,7 +924,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     dlo *= 0.8f; dro *= 0.8f;
                     /* reverb: pre-delay, 4 allpass diffusers, 4-line feedback network (Householder) */
                     {
-                        float x = ((l + r) * 0.5f + (dlo + dro) * 0.5f) * rsend + 1e-15f, yl[4], sumy = 0.0f, ol, orr;
+                        float x = ((l + r) * 0.5f + (dlo + dro) * 0.5f) * rsend + ldo * E.lrev * 1.1f + 1e-15f, yl[4], sumy = 0.0f, ol, orr;
                         float pre = rv_pre[E.pre_w];
                         uint32_t k;
                         rv_pre[E.pre_w] = x;
@@ -915,6 +962,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         }
                     }
                 }
+                l += ldo; r += ldo;               /* the melody voice (its reverb is in the reverb above) */
                 if (E.bl_env > 1e-4f) {           /* plop (a rising bubble) / toc (a knock on the glass) */
                     float bv;
                     E.bl_ph += E.bl_f / SR; if (E.bl_ph >= 1.0f) E.bl_ph -= 1.0f;

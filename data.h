@@ -61,9 +61,9 @@ static const struct { const char *s; float gate, swing, atk; } RHYTHM_DEF[NRHYTH
     {"X-------x-----x-", 0.9f, 0.0f, 0.0f},
     {"X-----x-----x---", 0.8f, 0.0f, 0.0f},
 };
-#define NGRID 8
-/* chord SETS: the chords of a song, one per white key from C (4 to 8 of them); each black key plays a richer version of
- * the chord to its left. A chord is its semitones above the set's key + a quality (M maj, V dominant-major, m, D dom7,
+#define NGRID 27
+/* chord SETS: the chords of a song, one per BLACK key from the left (up to 8 of them); the white keys play a melody in the
+ * scale of the chord that sounds. A chord is its semitones above the set's key + a quality (M maj, V dominant-major, m, D dom7,
  * d dim, s sus4, S sus2, a aug); key 0 = C .. 11 = B is the song's own key, rich the richness it starts with. */
 static const struct { const char *name, *by; uint8_t key, rich; const char *white; } GRID_DEF[NGRID] = {
     {"LET IT BE", "THE BEATLES", 0, 0, "0M 7M 9m 5M"},
@@ -74,4 +74,23 @@ static const struct { const char *name, *by; uint8_t key, rich; const char *whit
     {"CANON IN D", "PACHELBEL", 2, 0, "0M 7M 9m 4m 5M 0M 5M 7M"},
     {"I WILL SURVIVE", "GLORIA GAYNOR", 9, 0, "0m 5m 10M 3M 8M 2d 7D"},
     {"AUTUMN LEAVES", "JAZZ STANDARD", 7, 1, "5m 10D 3M 8M 2d 7D 0m"},
+    {"DANCING QUEEN", "ABBA", 9, 0, "0M 5M 9m 7D"},
+    {"STAIRWAY TO HEAVEN", "LED ZEPPELIN", 9, 0, "0m 3M 5M 8M 10M 7M"},
+    {"BILLIE JEAN", "MICHAEL JACKSON", 6, 1, "0m 5m 8M 10M"},
+    {"TAKE ON ME", "A HA", 9, 0, "0M 5M 7M 9m 2m 4m"},
+    {"PURPLE RAIN", "PRINCE", 10, 0, "0M 9m 5M 7M"},
+    {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M"},
+    {"SMELLS LIKE TEEN SPIRIT", "NIRVANA", 5, 0, "0M 5M 3M 8M"},
+    {"I WILL ALWAYS LOVE YOU", "WHITNEY HOUSTON", 9, 0, "0M 9m 5M 7M"},
+    {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 10M 3M 5m 7D"},
+    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 3M 5m"},
+    {"HELLO", "ADELE", 5, 0, "0m 3M 10M 5M"},
+    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M"},
+    {"BLINDING LIGHTS", "THE WEEKND", 5, 0, "0m 7m 10M 5M 2m"},
+    {"SOMEONE LIKE YOU", "ADELE", 9, 0, "0M 7M 9m 5M"},
+    {"SAD AND BEAUTIFUL", "VI IV I V", 0, 0, "9m 5M 0M 7M"},
+    {"ANDALUSIAN CADENCE", "I VII VI V", 9, 0, "0m 10M 8M 7M"},
+    {"BOHEMIAN RHAPSODY", "QUEEN", 10, 0, "0M 9m 2m 7D 5M"},
+    {"CREEP", "RADIOHEAD", 7, 0, "0M 4M 5M 5m"},
+    {"UPTOWN FUNK", "MARK RONSON", 2, 1, "0m 5D"},
 };

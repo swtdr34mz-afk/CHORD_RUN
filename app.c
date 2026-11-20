@@ -41,7 +41,8 @@ typedef struct {
     uint8_t bpm, swing, dens, side;             /* groove (density: 50 = as written; side: 0 off, 1 on) */
     uint8_t dpat, dkick, dhat, drim;            /* drums */
     uint8_t bsound, blevel, bmotif, bcut;       /* bass */
-    uint8_t creature, eyes, decor, acc;         /* decor */
+    uint8_t creature, eyes, decor, acc;         /* decor (the creature screen; no page for it for now) */
+    uint8_t mcut, mlev, mrev, msound;           /* melody: cutoff, level, reverb, preset (0 = as the chords) */
     uint8_t rsv[3];
 } settings_t;
 static settings_t set;
@@ -59,6 +60,7 @@ static void settings_defaults(void)
     set.dpat = 0; set.dkick = 75;   /* the drums start as a plain kick */ set.dhat = 30; set.drim = 25;
     set.bsound = BASS_ROND; set.blevel = 80; set.bmotif = MOTIF_SUIT; set.bcut = 45;
     set.creature = 0; set.eyes = 0; set.decor = 0; set.acc = 0;
+    set.mcut = 50; set.mlev = 80; set.mrev = 30; set.msound = 0;
 }
 
 static float glide_s(void) { return set.glide < 1u ? 0.0f : (float)set.glide * 0.015f; }
@@ -121,19 +123,70 @@ static int quality_ivs(char q, int rich, int8_t *iv)
 typedef struct { int root; int8_t iv[6]; int n; int bass_off; int oct; int shift; } chord_t;
 
 #define KEY_C4 7                         /* key index of C4 (key 0 is F3) */
-/* a key -> the set's chord (0..7) it plays; *var = 1 on a black key (the richer version of the chord to its left);
- * -1 when the key is silent (the set has no such chord). *oct: the octave of the key, as the voicing wants it */
+/* The keys: the BLACK keys play the set's chords (the first 8, left to right), the WHITE keys play the melody. */
+static int8_t kb_black[32], kb_white[32];                      /* key -> chord slot (-1) / white-key number (-1) */
+static uint8_t kb_ready;
+static int last_slot = -1;                                      /* the chord the melody follows (the last one played) */
+static uint32_t ld_held;                                        /* the white keys held */
+static int ld_cur = -1;                                         /* the white key the melody voice plays (-1: none) */
+
+static void kb_init(void)
+{
+    int k, i, nb = 0, nw = 0;
+    for (k = 0; k < 32; k++) { kb_black[k] = -1; kb_white[k] = -1; }
+    for (k = 0; k < NKEYS && k < 32; k++) {
+        int pos = (((k - KEY_C4) % 12) + 12) % 12, blk = 0;
+        for (i = 0; i < 5; i++) if (BLACK_IDX[i] == pos) blk = 1;
+        if (blk) { kb_black[k] = (int8_t)(nb < 8 ? nb : -1); nb++; }
+        else kb_white[k] = (int8_t)nw++;
+    }
+    kb_ready = 1;
+}
+
+/* a key -> the set's chord (0..7) it plays; -1 when the key is no chord key or the set has no such chord */
 static int key_slot(int key, int *var, int *oct)
 {
-    static const int8_t LEFT[5] = {0, 1, 3, 4, 5};             /* the white chord left of each black key (C# D# F# G# A#) */
-    int rel = key - KEY_C4, pos = ((rel % 12) + 12) % 12, i, n = grid_n[set.grid];
+    int s;
+    if (!kb_ready) kb_init();
     *var = 0;
-    *oct = rel < 0 ? -1 : rel / 12;
-    if (pos == 0 && *oct >= 1) return n >= 8 ? 7 : 0;          /* C5: the 8th chord, or the first again an octave up */
-    for (i = 0; i < 7; i++) if (WHITE_IDX[i] == pos) return i < n ? i : -1;
-    for (i = 0; i < 5; i++)
-        if (BLACK_IDX[i] == pos) { *var = 1; return LEFT[i] < n ? LEFT[i] : -1; }
-    return -1;
+    *oct = 0;
+    if (key < 0 || key >= 32) return -1;
+    s = kb_black[key];
+    return s >= 0 && s < (int)grid_n[set.grid] ? s : -1;
+}
+
+/* The melody: white key number w -> a MIDI pitch, in the scale of the chord that last played. The scale is the mode of that chord
+ * (by its quality) that fits the song's own key best, so the melody follows the harmony and stays in the song. */
+static const int8_t MODES[7][7] = {{0,2,4,5,7,9,11}, {0,2,3,5,7,9,10}, {0,1,3,5,7,8,10}, {0,2,4,6,7,9,11},
+                                   {0,2,4,5,7,9,10}, {0,2,3,5,7,8,10}, {0,1,3,5,6,8,10}};   /* ionian dorian phrygian lydian mixolydian aeolian locrian */
+static float mel_pitch(int w)
+{
+    int n = grid_n[set.grid], slot = last_slot, root, minor, cand[3], nc, i, j, best = 0, bs = -1, base, deg, p;
+    const chord_def_t *d;
+    uint16_t song = 0;
+    if (slot < 0 || slot >= n) slot = 0;
+    d = &grid_w[set.grid][slot];
+    root = (set.key + d->semi) % 12;
+    minor = (grid_w[set.grid][0].semi == 0 && grid_w[set.grid][0].q == 'm')            /* a minor song: it starts or ends on its minor tonic */
+         || (grid_w[set.grid][n - 1].semi == 0 && grid_w[set.grid][n - 1].q == 'm');
+    for (i = 0; i < 7; i++) song |= (uint16_t)(1u << ((set.key + MODES[minor ? 5 : 0][i]) % 12));
+    switch (d->q) {
+    case 'm': cand[0] = 1; cand[1] = 5; cand[2] = 2; nc = 3; break;
+    case 'D': cand[0] = 4; nc = 1; break;
+    case 'd': cand[0] = 6; nc = 1; break;
+    default: cand[0] = 0; cand[1] = 3; cand[2] = 4; nc = 3; break;
+    }
+    for (j = 0; j < nc; j++) {
+        int sc = 0;
+        for (i = 0; i < 7; i++) sc += (song >> ((root + MODES[cand[j]][i]) % 12)) & 1;
+        if (sc > bs) { bs = sc; best = cand[j]; }
+    }
+    base = 60 + root - (root >= 6 ? 12 : 0) + set.octave * 12;
+    deg = w < 0 ? 0 : w;
+    p = base + MODES[best][deg % 7] + 12 * (deg / 7);
+    while (p > 108) p -= 12;
+    while (p < 36) p += 12;
+    return (float)p;
 }
 
 static chord_t slot_chord(int slot, int var, int oct)
@@ -254,7 +307,14 @@ static void spread(float *n, int mode)   /* SERRE as is, OUVERT drop 2, LARGE dr
 }
 
 /* ------------------------------------------------------------------ engine links --- */
-static void send_sound(void) { eng_sound(&SOUNDS[set.sound]); }
+/* the melody voice (white keys): its preset (0 = the chords' sound), cutoff (50 = as the sound is made), level, reverb */
+static void send_lead(void)
+{
+    float hz = 70.0f * fm_powf(12000.0f / 70.0f, (float)set.mcut * 0.01f);
+    eng_lead_sound(set.msound ? &SOUNDS[set.msound - 1] : &SOUNDS[set.sound]);
+    eng_lead_params(hz, (float)set.mlev * 0.0125f, (float)set.mrev * 0.01f);
+}
+static void send_sound(void) { eng_sound(&SOUNDS[set.sound]); send_lead(); }
 static void send_rhythm(void)
 {
     rhythm_t r;
@@ -402,9 +462,9 @@ static void play(int idx)
 {
     chord_t c = build_chord(idx);
     float notes[4], bass, g = active ? glide_s() : 0.0f;
-    if (c.n == 0) return;                                       /* a silent key */
     uint32_t now = plat_ms();
     int i;
+    if (c.n == 0) return;                                       /* a silent key */
     voice_chord(&c, notes);
     spread(notes, set.voicing);
     bass = (float)(36 + (c.root + c.bass_off) % 12 + clamp(c.shift, -12, 12));
@@ -414,6 +474,7 @@ static void play(int idx)
     }
     vis[4].from = vis_pitch(4, now); vis[4].to = bass; vis[4].t0 = now; vis[4].dur = (uint32_t)(g * 1000.0f);
     cur_idx = idx;
+    { int v, o; last_slot = key_slot(idx, &v, &o); }
     active = 1;
     eng_chord(notes, bass, glide_s());
 }
@@ -434,20 +495,21 @@ static void rechord(void)
 }
 
 /* ------------------------------------------------------------------ pages --- */
-enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_DECOR, PG_DRUMS, NPAGE };
-static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "DECOR", "DRUMS"};
+enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, NPAGE };
+static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS"};
 static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO};
 static const uint8_t PAGE_RGB[NPAGE][3] = {{255, 150, 220}, {190, 150, 255}, {120, 230, 255}, {255, 214, 110},
                                           {140, 240, 150}, {235, 235, 240}, {255, 140, 100}};
 
 enum { KD_PCT, KD_OFF, KD_GLIDE, KD_BPM, KD_BIP, KD_LIST };
-enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL };
+enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL, G_MELODY };
 typedef struct {
     const char *lab;
     uint8_t *v;
     uint8_t lo, hi, kind, grp;
     const char *const *names;
 } kdef_t;
+static const char *const MSOUND_NAME[NSOUND + 1] = {"AS CHORDS", "PAPER STRINGS", "STILL WATER", "SOFT HORIZON", "VELVET TAPE", "AIR AND SALT", "LOW CLOUD", "AIRFIELD", "SLOW BLOOM", "GLASS TIDE", "DUST PLUCK", "MOON KEYS", "SINE DROPS", "NIGHT SIGNAL"};
 static const kdef_t KD[NPAGE][4] = {
     {{"CUTOFF", &set.cutoff, 0, 100, KD_PCT, G_PARAMS, 0}, {"GLIDE", &set.glide, 0, 100, KD_GLIDE, G_NONE, 0},
      {"LENGTH", &set.gate, 0, 100, KD_PCT, G_GROOVE, 0}, {"DRUMS", &set.drums, 0, 100, KD_OFF, G_DRUMLVL, 0}},
@@ -459,10 +521,8 @@ static const kdef_t KD[NPAGE][4] = {
      {"DENSITY", &set.dens, 0, 100, KD_BIP, G_GROOVE, 0}, {"SIDECHAIN", &set.side, 0, 1, KD_LIST, G_PARAMS, ONOFF_NAME}},
     {{"SOUND", &set.bsound, 0, NBASS_SOUND - 1, KD_LIST, G_BASS, BASS_NAME}, {"LEVEL", &set.blevel, 0, 100, KD_PCT, G_BASS, 0},
      {"RIFF", &set.bmotif, 0, NMOTIF - 1, KD_LIST, G_BASS, MOTIF_NAME}, {"FILTER", &set.bcut, 0, 100, KD_PCT, G_BASS, 0}},
-    {{"CREATURE", &set.creature, 0, NCREATURE - 1, KD_LIST, G_NONE, CREATURE_NAME},
-     {"EYES", &set.eyes, 0, NEYE - 1, KD_LIST, G_NONE, EYE_NAME},
-     {"BACKDROP", &set.decor, 0, NDECOR - 1, KD_LIST, G_NONE, DECOR_NAME},
-     {"EXTRA", &set.acc, 0, NACC - 1, KD_LIST, G_NONE, ACC_NAME}},
+    {{"CUTOFF", &set.mcut, 0, 100, KD_PCT, G_MELODY, 0}, {"LEVEL", &set.mlev, 0, 100, KD_PCT, G_MELODY, 0},
+     {"REVERB", &set.mrev, 0, 100, KD_PCT, G_MELODY, 0}, {"PRESET", &set.msound, 0, NSOUND, KD_LIST, G_MELODY, MSOUND_NAME}},
     {{"PATTERN", &set.dpat, 0, NDRUM - 1, KD_LIST, G_DRUMS, DRUM_NAME}, {"KICK", &set.dkick, 0, 100, KD_OFF, G_DRUMS, 0},
      {"HI-HAT", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"RIM", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
 };
@@ -595,6 +655,7 @@ static void apply_group(int g)
     case G_GROOVE: send_groove(); break;
     case G_DRUMS: send_drums(); break;
     case G_BASS: send_bass(); break;
+    case G_MELODY: send_lead(); break;
     case G_CHORD: rechord(); break;
     case G_DRUMLVL:
         if ((*KD[PG_MAIN][3].v > 0) != (prev_drums > 0)) send_params();
@@ -688,6 +749,22 @@ static void input(void)
     uint32_t keys = plat_keys(), btn = plat_buttons(), k, lit_keys = 0, lit_btn = 0, now = plat_ms();
     int32_t e;
     clock_follow(now);
+    if (!kb_ready) kb_init();
+    for (k = 0; k < NKEYS; k++) {                               /* the white keys: the melody voice (the last key pressed sounds) */
+        uint32_t bit = 1u << k;
+        if (kb_white[k] < 0) continue;
+        if ((keys & bit) && !(ui.keys & bit)) {
+            ld_held |= bit; ld_cur = (int)k; eng_lead(mel_pitch(kb_white[k]));
+        } else if (!(keys & bit) && (ui.keys & bit)) {
+            ld_held &= ~bit;
+            if (ld_cur == (int)k) {
+                int j;
+                ld_cur = -1;
+                for (j = NKEYS - 1; j >= 0; j--) if (ld_held & (1u << j)) { ld_cur = j; break; }
+                if (ld_cur >= 0) eng_lead(mel_pitch(kb_white[ld_cur])); else eng_lead(-1.0f);
+            }
+        }
+    }
     for (k = 0; k < NKEYS; k++) {
         uint32_t bit = 1u << k;
         int kv, ko;
@@ -751,7 +828,8 @@ static void input(void)
         else dirty_at = plat_ms();
     }
     /* lights: the keys glow, the one playing is lit; the page's button, the fun ones that are on, the pressed one */
-    lit_keys = valid_keys();                                    /* the keys that have a chord glow; a latched chord blinks */
+    lit_keys = valid_keys();
+    for (k = 0; k < NKEYS; k++) if (kb_white[k] >= 0 && ((keys >> k) & 1u)) lit_keys |= 1u << k;   /* a melody key lights while pressed */                                    /* the keys that have a chord glow; a latched chord blinks */
     if (cur_idx >= 0 && held_idx < 0 && (now / 300u) % 2u) lit_keys &= ~(1u << (uint32_t)cur_idx);
     if (set.page != PG_MAIN) lit_btn |= 1u << PAGE_BTN[set.page];
     if (ui.bowl) lit_btn |= 1u << B_SAVE;
@@ -1766,6 +1844,7 @@ int app_expect(const char *what, int *got)
 {
     if (!strcmp(what, "grid")) *got = set.grid;
     else if (!strcmp(what, "key")) *got = set.key;
+    else if (!strcmp(what, "lead")) *got = ld_cur >= 0;
     else if (!strcmp(what, "sound")) *got = set.sound;
     else if (!strcmp(what, "rhythm")) *got = set.rhythm;
     else if (!strcmp(what, "chord")) *got = cur_idx;

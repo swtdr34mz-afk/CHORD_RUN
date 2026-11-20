@@ -20,9 +20,9 @@ key 1 up
 wait 30
 expect active 0
 # a grid, a rhythm: the chord keeps playing (latch); the drums from the main page's K4 (kick only at first)
-turn SELECT 3
+turn SELECT 4
 wait 30
-expect grid 3
+expect grid 4
 turn ALGO 8
 wait 30
 expect rhythm 8
@@ -83,10 +83,10 @@ wait 30
 expect page 2
 turn K1 1
 wait 30
-expect key 1
+expect key 10
 turn K1 -1
 wait 30
-expect key 0
+expect key 9
 tap ENV
 wait 60
 expect page 3
@@ -112,7 +112,7 @@ wav bass_acid.wav
 wait 1500
 wavstop
 shot bass.png
-# decor: the eight creatures, the eight backgrounds, eye shapes, accessories
+# the melody page (EDIT): cutoff, level, reverb, preset
 tap EDIT
 wait 30
 expect page 5
@@ -157,7 +157,6 @@ turn K3 1
 turn K4 2
 wait 80
 shot c7.png
-expect creature 7
 turn K1 -7
 turn K2 -5
 turn K3 -7
@@ -249,7 +248,7 @@ wait 4500
 expect dirty 0
 reboot
 wait 600
-expect grid 3
+expect grid 4
 expect sound 1
 expect page 0
 # HOME + REC held 3 s: the first settings back (let go before: nothing)

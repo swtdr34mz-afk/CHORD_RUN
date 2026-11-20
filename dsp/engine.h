@@ -22,6 +22,7 @@ typedef struct {
     float fenv, fdec;                  /* filter envelope (octaves, s) */
     float chorus, wob, wob_rate;       /* chorus amount, pitch wobble (cents, Hz) */
     float noise, bass, level;          /* noise level, bass level (unused: the bass has its own), output level */
+    float cut;                         /* the sound's own cutoff in Hz at CUTOFF 50 %; the knob moves it up / down. 0 = the knob alone */
 } sound_t;
 
 typedef struct {

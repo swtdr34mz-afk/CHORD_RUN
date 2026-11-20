@@ -52,7 +52,7 @@ static void settings_defaults(void)
 {
     memset(&set, 0, sizeof set);
     set.magic = SET_MAGIC;
-    set.cutoff = 72; set.glide = 17; set.gate = 50; set.drums = 0;      /* first start: no drums */
+    set.cutoff = 50; set.glide = 17; set.gate = 50; set.drums = 0;      /* first start: no drums */
     set.delay = 0; set.trem = 0; set.chorus = 0; set.reverb = 22;   /* no FX, a light reverb */
     set.strum = 0;
     set.bpm = 118; set.swing = 0; set.dens = 50; set.side = 1;
@@ -62,7 +62,8 @@ static void settings_defaults(void)
 }
 
 static float glide_s(void) { return set.glide < 1u ? 0.0f : (float)set.glide * 0.015f; }
-static float cutoff_hz(void) { return 70.0f * fm_powf(12000.0f / 70.0f, (float)set.cutoff * 0.01f); }   /* 70 Hz .. 12 kHz */
+/* the knob, 70 Hz .. 12 kHz; the engine reads it relative to the sound's own cutoff (50 % = as the sound is made) */
+static float cutoff_hz(void) { return 70.0f * fm_powf(12000.0f / 70.0f, (float)set.cutoff * 0.01f); }
 static float reso_q(void) { return 1.0f; }
 
 /* ------------------------------------------------------------------ chords --- */
@@ -439,7 +440,7 @@ static const kdef_t KD[NPAGE][4] = {
 static int settings_ok(void)
 {
     int p, k;
-    if (set.magic != SET_MAGIC || set.grid >= NGRID || set.octave < -2 || set.octave > 2 || set.sound >= NFAMILY * PER_FAMILY
+    if (set.magic != SET_MAGIC || set.grid >= NGRID || set.octave < -2 || set.octave > 2 || set.sound >= NSOUND
         || set.rhythm >= NRHYTHM || set.page >= NPAGE)
         return 0;
     for (p = 0; p < NPAGE; p++)
@@ -600,8 +601,8 @@ static void encoder(int k, int32_t e)
         if (!set.rhythm && held_idx < 0 && active) stop();   /* no rhythm, no latch */
         break;
     case EN_PRESET:
-        wrap_u8(&set.sound, e, NFAMILY * PER_FAMILY);
-        app_say(FAMILY_NAME[set.sound / PER_FAMILY], SOUND_NAME[set.sound]);
+        wrap_u8(&set.sound, e, NSOUND);
+        app_say(FAMILY_NAME[FAMILY_OF[set.sound]], SOUND_NAME[set.sound]);
         send_sound();
         break;
     case EN_K1: case EN_K2: case EN_K3: case EN_K4: knob(k - EN_K1, e); return;

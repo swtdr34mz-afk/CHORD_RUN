@@ -216,9 +216,9 @@ turn ALGO -8
 wait 300
 shot sleep.png
 # sounds: a pluck with strum, an FM key
-turn PRESET 18
+turn PRESET 9
 wait 30
-expect sound 18
+expect sound 9
 tap SEL
 turn K4 10
 tap SEL
@@ -242,7 +242,7 @@ expect dirty 0
 reboot
 wait 600
 expect grid 2
-expect sound 10
+expect sound 1
 expect page 0
 # HOME + REC held 3 s: the first settings back (let go before: nothing)
 turn PRESET 3
@@ -253,7 +253,7 @@ wait 1500
 release REC
 release HOME
 wait 100
-expect sound 13
+expect sound 4
 press HOME
 press REC
 wait 1200

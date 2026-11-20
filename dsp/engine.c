@@ -8,6 +8,7 @@
 #include "plat.h"
 
 #define SR ENG_SR
+#define CUT_MID_HZ 916.5f     /* app.c cutoff_hz() at CUTOFF 50 %: 70 Hz * (12000 / 70) ^ 0.5 */
 
 /* no libc on the device: small copies and clears of our own */
 static void zero(void *d, uint32_t n) { uint8_t *p = (uint8_t *)d; while (n--) *p++ = 0; }
@@ -665,7 +666,10 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
             E.rv_hpl = fm_flush(E.rv_hpl); E.rv_hpr = fm_flush(E.rv_hpr); E.k_tail = fm_flush(E.k_tail);
             E.duck = fm_flush(E.duck);
             for (i = 0; i < 4; i++) { E.rv_lp[i] = fm_flush(E.rv_lp[i]); E.v[i].prev = fm_flush(E.v[i].prev); E.v[i].last = fm_flush(E.v[i].last); }
-            fc = fm_minf(SR * 0.45f, E.cut * fm_exp2f(p->fenv * E.fenv * E.vel));
+            {   /* a sound's own cutoff, moved by the knob (about 3.7 octaves each way); 0: the knob's alone */
+                float base = p->cut > 0.0f ? p->cut * E.cut * (1.0f / CUT_MID_HZ) : E.cut;
+                fc = fm_minf(SR * 0.45f, base * fm_exp2f(p->fenv * E.fenv * E.vel));
+            }
             if (eng == ENGINE_PLUCK) fc = fm_minf(fc, 2400.0f);   /* plucked strings: their own ceiling, never harsh */
             E.g = fm_tanf(3.14159265f * fc / SR);
             /* chorus taps for this chunk: 12 ms and 19 ms, +-2.8 ms */

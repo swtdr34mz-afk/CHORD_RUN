@@ -12,4 +12,8 @@ OSR-1 par Obsimo (OSR Records), sous GPL-3.0-only.
 
 ## Code repris d'autres firmwares
 
-Aucun pour l'instant. Chaque emprunt sera listé ici : projet, auteur, licence, fichiers concernés.
+| Projet | Auteur | Licence | Utilisé pour |
+| --- | --- | --- | --- |
+| [DRIFT](https://github.com/FBNFRTG/drift-fm1) 0.9.6 / [Felucca-Engines](https://github.com/hugelton/Felucca-Engines) (moteur ANALOG) | Fabian Freitag ; Leo Kuroshita (Hügelton Instruments) | GPL-3.0-only ; MIT | `data.h` : les 13 sons (familles AMBIENT et SOFT KEYS) reprennent, convertis pour le moteur « sub » d'OSR-1, des réglages d'usine de DRIFT : PAPER STRINGS, STILL WATER, SOFT HORIZON, VELVET TAPE, AIR AND SALT, LOW CLOUD, AIRFIELD, SLOW BLOOM, GLASS TIDE, DUST PLUCK, MOON KEYS, SINE DROPS, NIGHT SIGNAL |
+
+Chaque nouvel emprunt sera listé ici : projet, auteur, licence, fichiers concernés.

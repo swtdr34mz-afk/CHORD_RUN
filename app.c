@@ -673,6 +673,16 @@ static void button(int k)
     dirty();
 }
 
+/* the keys that play a chord in the current set (a bit per key) */
+static uint32_t valid_keys(void)
+{
+    uint32_t m = 0, k;
+    int v, o;
+    for (k = 0; k < NKEYS; k++)
+        if (key_slot((int)k, &v, &o) >= 0) m |= 1u << k;
+    return m;
+}
+
 static void input(void)
 {
     uint32_t keys = plat_keys(), btn = plat_buttons(), k, lit_keys = 0, lit_btn = 0, now = plat_ms();
@@ -741,7 +751,8 @@ static void input(void)
         else dirty_at = plat_ms();
     }
     /* lights: the keys glow, the one playing is lit; the page's button, the fun ones that are on, the pressed one */
-    if (cur_idx >= 0) lit_keys |= 1u << (uint32_t)cur_idx;
+    lit_keys = valid_keys();                                    /* the keys that have a chord glow; a latched chord blinks */
+    if (cur_idx >= 0 && held_idx < 0 && (now / 300u) % 2u) lit_keys &= ~(1u << (uint32_t)cur_idx);
     if (set.page != PG_MAIN) lit_btn |= 1u << PAGE_BTN[set.page];
     if (ui.bowl) lit_btn |= 1u << B_SAVE;
     if (ui.dark) lit_btn |= 1u << B_ARP;

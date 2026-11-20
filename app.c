@@ -445,7 +445,7 @@ static void send_bass(void) { eng_bass(set.bsound, set.bmotif, (float)set.blevel
 
 /* ------------------------------------------------------------------ playing --- */
 static int cur_idx = -1, held_idx = -1, active;
-static char chord_txt[16] = "BLOP";
+static char chord_txt[16] = APP_NAME;
 /* the voices' pitches for the screen, as the engine glides them */
 static struct { float from, to; uint32_t t0, dur; } vis[5];
 
@@ -1908,6 +1908,9 @@ static void neon_runner(int gy, int cx, int speed, int with_obst, uint32_t now)
     neon_char(set.rsv[0] < NCHR ? set.rsv[0] : 0, cx, gy - 8 - (int)(h + 0.5f), ang);
 }
 
+#define TITLE_1 "CHORD"                 /* the name, two lines on the intro: change these two words (and APP_NAME in app.h) */
+#define TITLE_2 "RUN"
+
 /* ---- the intro (and the help: HOME held): the sun rises, the title drops in, the floor rushes, the runner crosses */
 static void neon_splash(int bottom)
 {
@@ -1926,7 +1929,7 @@ static void neon_splash(int bottom)
     if (ms > 1500.0f && ms < 2300.0f && cx > 60) {}                    /* (the runner just crosses) */
     {   /* the title: two lines drop in with a bounce, in three colours (a split) */
         float k = ease3((ms - 250.0f) / 700.0f), q = 1.0f - k;
-        const char *l1 = "CHORDS", *l2 = "2027";
+        const char *l1 = TITLE_1, *l2 = TITLE_2;
         int y1, y2, x1 = (240 - text_w(&FONT_L, l1)) / 2, x2 = (240 - text_w(&FONT_L, l2)) / 2;
         ty = -(int)(q * 90.0f) + (int)(6.0f * fm_sin_turns(q * 1.5f) * q);
         y1 = 22 + ty; y2 = 58 + ty;
@@ -2005,21 +2008,17 @@ static void draw_screen(int bottom)
 }
 
 
-/* the first screen at boot (the platform's splash, while the FM-1 starts): the intro's first picture,
- * BLOP in its lights over the dark water, so the start runs on without a flash */
+/* the first screen at boot (the platform's splash, while the FM-1 starts): the intro's very first picture (night sky,
+ * sun, floor; the title is still above the screen), so the start runs on into the animation without any other screen */
 void app_splash(void)
 {
     scene_init();
     sc.title = 1.0f; sc.title_ms = 0.0f;
-    sc.R = 10.0f; sc.sq = sc.sx = 1.0f; sc.rc = 1.0f; sc.rs = 0.0f; sc.bright = 0.86f;
-    sc.eye_state = EYE_SHUT; sc.eye_r = 1.35f;
-    sc.ecol[0] = DECOR_EYE[0][0]; sc.ecol[1] = DECOR_EYE[0][1]; sc.ecol[2] = DECOR_EYE[0][2];
-    eye_places();
     cv_begin(240, 120, 0);
-    draw_cells(0);
+    neon_splash(0);
     cv_blit(0, 0);
     cv_begin(240, 120, 0);
-    draw_cells(40);
+    neon_splash(1);
     cv_blit(0, 120);
 }
 

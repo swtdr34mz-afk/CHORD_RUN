@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "plat.h"
 
-#define APP_NAME "BLOP"
+#define APP_NAME "CHORD RUN"
 #define APP_SPLASH_RGB RGB(255, 214, 110)
 #define APP_SPLASH                      /* app_splash: the intro's first picture, not the platform's white page */
 #define APP_TICK                        /* app_tick: the MIDI in, each clock timed to the ms */

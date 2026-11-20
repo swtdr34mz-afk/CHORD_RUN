@@ -1,6 +1,6 @@
 # BLOP build settings (fm1-base tools/build.py)
 name = "BLOP"
-id_prefix = "FM-1_94"           # package identity: dev FM-1_9400 (check it is free before a public release)
+id_prefix = "FM-1_571"          # package identity: dev FM-1_57100, releases FM-1_571 + XXYYZZ (the 94 prefix belonged to the Blop card)
 usb_manufacturer = "OSR Records"
 usb_product = "Blop FM-1"
 o2 = ["dsp/engine.c"]           # the sound engine, at -O2

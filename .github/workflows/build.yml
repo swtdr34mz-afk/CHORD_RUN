@@ -60,7 +60,8 @@ jobs:
         run: |
           export JIELI_TOOLCHAIN="$HOME/.jieli/toolchain" AC79_SDK="$HOME/.jieli/ac79-sdk"
           set -o pipefail
-          if ! python3 fm1-base/tools/build.py . 2>&1 | tee build.log; then
+          REL=""; if [ "${GITHUB_REF_TYPE}" = "tag" ]; then REL="--release ${GITHUB_REF_NAME#v}"; fi
+          if ! python3 fm1-base/tools/build.py . $REL 2>&1 | tee build.log; then
             # the log's errors as annotations (readable from the API without signing in)
             grep -nE "error|Error|ERROR|undefined|overflow|exceed|check|fail" build.log | head -60 > errs.txt || true
             echo "::error title=build (errors)::$(sed 's/%/%25/g' errs.txt | awk '{printf "%s%%0A", $0}')"
@@ -79,3 +80,9 @@ jobs:
             build/host/*.png
             build/host/*.wav
           if-no-files-found: warn
+
+      - name: Release (a tag v1.0, v1.1 ...: the .fwsc is attached for the Firmware Hub)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.fwsc

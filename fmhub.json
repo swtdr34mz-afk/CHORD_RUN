@@ -1,7 +1,6 @@
 {
-  "what": "Explore sound with your Blop: one-finger chords from 38 grids, chord rhythms, a bass with its own riffs and a few discreet drums with sidechain, while a little creature swims to your chords in an aquarium on the screen. Chords and bass go out as MIDI over USB.",
-  "author": "Obsimo",
+  "what": "One-finger chord player: the chords of a song sit on the black keys, the white keys play a melody that follows the chord's scale. 19 song sets, a melody voice with its own reverb, chord rhythms, bass and soft drums, ten runner characters on a neon screen. Chords and bass go out as MIDI.",
+  "author": "Tom (based on Blop by Obsimo)",
   "kinds": "chords",
-  "play": "https://osr-experiment.github.io/OSR-1/emu/",
   "image": "site/img/hub.webp"
 }

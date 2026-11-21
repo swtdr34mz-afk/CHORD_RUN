@@ -4,6 +4,11 @@ CHORD RUN by swtdr34mz, based on OSR-1 / Blop by Obsimo (OSR Records), under GPL
 CHORD RUN's own parts: the song sets and their sounds, the melody voice, the eight added sounds (NYLON PLUCK .. POCKET
 LEAD), the drum styles and kits, the runner, missions and loop, the 2027 screens.
 
+The GRAND PIANO's samples (res/piano.bin, made by tools/make_piano.py): nine notes of the **Salamander Grand Piano V3**
+by **Alexander Holm** (a Yamaha C5), https://archive.org/details/SalamanderGrandPianoV3, under **CC-BY 3.0**
+(https://creativecommons.org/licenses/by/3.0/), as remapped in https://github.com/sfzinstruments/SalamanderGrandPiano;
+changed: mono, 22,050 Hz, levelled, shortened with a crossfaded loop, 4-bit ADPCM.
+
 OSR-1 par Obsimo (OSR Records), sous GPL-3.0-only.
 
 ## Construit sur

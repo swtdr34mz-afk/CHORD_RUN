@@ -18,6 +18,20 @@
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_PROGRESS, OBJ_NOBJ };
 #define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u}
 
+/* the resource region: the grand piano's samples (res/piano.bin, tools/make_piano.py), the data area below the store */
+#define APP_RES_BASE 0x97000u
+#define APP_RES_SECTORS 69u
+
+/* backup and restore over USB (needed by the resource region's transfer): the settings and the progress */
+#define APP_BACKUP_OBJS {OBJ_SETTINGS, OBJ_PROGRESS}
+#define APP_BACKUP_MAGIC 0x4E555243u            /* "CRUN" */
+#define APP_BACKUP_VERSION 1u
+#define APP_BACKUP_WHAT "replaces settings, progress"
+int app_backup_playing(void);
+void app_backup_flush(void);
+void app_backup_hold(int on);
+void app_backup_restored(void);
+
 void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);
 void app_panic(void);

@@ -2,5 +2,6 @@
   "what": "One-finger chord player: a song's chords on the black keys, a scale-matched melody on the white keys (ASSIST lights the good notes). 17 songs, each with its own sounds and drums; twelve drum styles; a 4-bar looper; a runner that runs while you play, with missions and characters to unlock.",
   "author": "swtdr34mz (based on Blop by Obsimo)",
   "kinds": "chords",
-  "image": "site/img/hub.webp"
+  "image": "site/img/hub.webp",
+  "sounds": "licensed: Salamander Grand Piano V3 by Alexander Holm (https://archive.org/details/SalamanderGrandPianoV3), CC-BY 3.0"
 }

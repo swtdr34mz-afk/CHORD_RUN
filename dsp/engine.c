@@ -302,6 +302,106 @@ float eng_beat(void)
 static inline float rndu(void) { return 0.5f + 0.5f * rnd(); }
 static uint32_t now_ms(void) { return (uint32_t)((float)E.samples * (1000.0f / SR)); }
 
+/* ------------------------------------------------------------------ the sampled piano --- */
+/* Nine notes of a grand (tools/make_piano.py: Salamander Grand Piano V3, Alexander Holm, CC-BY 3.0), 4-bit IMA ADPCM at
+ * 22,050 Hz, read in place from the flash (the resource region). A voice takes the nearest note and plays it faster or
+ * slower (linear between two decoded samples); at its end it jumps back to the loop's start (the decoder's state there
+ * is in the table) and fades on by itself, as a piano does. */
+typedef struct { uint8_t root, sidx, lidx, pad; int16_t spred, lpred; uint32_t off, len, loop; } smp_ent_t;
+static const uint8_t *smp_data;
+static smp_ent_t smp_e[16];
+static int smp_n;
+static float smp_ratio;                        /* the samples' rate / SR */
+typedef struct {
+    const uint8_t *d;
+    uint32_t pos, len, loop;
+    int32_t pred, idx;
+    float s0, s1, frac, g;
+    uint8_t on, which, lidx;
+    int16_t lpred;
+} sv_t;
+static sv_t sv[5];                             /* the chord's four voices, the melody */
+static const int16_t IMA_STEP[89] = {7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55,
+    60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598,
+    658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428,
+    4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623,
+    27086, 29794, 32767};
+static const int8_t IMA_INDEX[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
+
+int eng_samples(const uint8_t *p, uint32_t len)
+{
+    uint32_t n, i, magic, rate;
+    smp_data = 0; smp_n = 0;
+    if (!p || len < 16u) return 0;
+    copy(&magic, p, 4); copy(&n, p + 4, 4); copy(&rate, p + 8, 4);
+    if (magic != 0x314F4E50u || n == 0u || n > 16u || len < 16u + n * 20u || rate < 8000u || rate > 48000u) return 0;
+    for (i = 0; i < n; i++) {
+        smp_ent_t e;
+        copy(&e, p + 16u + i * 20u, 20u);
+        if (e.off > len || e.len < 64u || e.loop >= e.len || e.off + (e.len + 1u) / 2u > len || e.sidx > 88u || e.lidx > 88u)
+            return 0;
+        smp_e[i] = e;
+    }
+    smp_ratio = (float)rate / SR;
+    smp_n = (int)n;
+    smp_data = p;
+    return 1;
+}
+
+static inline int32_t smp_next(sv_t *s)
+{
+    uint32_t nib = (uint32_t)(s->d[s->pos >> 1] >> ((s->pos & 1u) << 2)) & 15u;
+    int32_t step = IMA_STEP[s->idx], vp = step >> 3;
+    if (nib & 4u) vp += step;
+    if (nib & 2u) vp += step >> 1;
+    if (nib & 1u) vp += step >> 2;
+    s->pred += (nib & 8u) ? -vp : vp;
+    if (s->pred > 32767) s->pred = 32767; else if (s->pred < -32768) s->pred = -32768;
+    s->idx += IMA_INDEX[nib & 7u];
+    if (s->idx < 0) s->idx = 0; else if (s->idx > 88) s->idx = 88;
+    if (++s->pos >= s->len) {                   /* the end: back to the loop, fading on */
+        s->pos = s->loop; s->pred = s->lpred; s->idx = s->lidx;
+        s->g *= 0.7f;
+        if (s->g < 0.002f) s->on = 0;
+    }
+    return s->pred;
+}
+
+/* a new note on a voice: the nearest sampled note, from its start */
+static void smp_start(sv_t *s, float m)
+{
+    int i, best = 0;
+    float bd = 1e9f;
+    const smp_ent_t *e;
+    if (!smp_n) { s->on = 0; return; }
+    for (i = 0; i < smp_n; i++) {
+        float d = fm_fabsf(m - (float)smp_e[i].root);
+        if (d < bd) { bd = d; best = i; }
+    }
+    e = &smp_e[best];
+    s->d = smp_data + e->off; s->len = e->len; s->loop = e->loop;
+    s->pos = 0; s->pred = e->spred; s->idx = e->sidx; s->lpred = e->lpred; s->lidx = e->lidx;
+    s->which = (uint8_t)best; s->g = 1.0f; s->frac = 0.0f; s->on = 1;
+    s->s0 = 0.0f;
+    s->s1 = (float)smp_next(s);
+}
+
+/* the step through the sample for pitch m */
+static inline float smp_rate(const sv_t *s, float m)
+{
+    return fm_exp2f((m - (float)smp_e[s->which].root) * (1.0f / 12.0f)) * smp_ratio;
+}
+
+static inline float smp_tick(sv_t *s, float rate)
+{
+    float o;
+    if (!s->on) return 0.0f;
+    s->frac += rate;
+    while (s->frac >= 1.0f) { s->s0 = s->s1; s->s1 = (float)smp_next(s); s->frac -= 1.0f; }
+    o = (s->s0 + (s->s1 - s->s0) * s->frac) * s->g * (1.0f / 32768.0f);
+    return o;
+}
+
 /* ------------------------------------------------------------------ render side --- */
 static void set_notes(const float *notes, float bass, float glide_chunks)
 {
@@ -424,6 +524,7 @@ static void hit(float vel, float gate_s, float atk)
         if (E.sdel[i] > 0.0f) { /* the voice fades out quickly in its wait (see the voice loop), no hard cut */ }
         else {
             if (p->engine == ENGINE_PLUCK) excite(&E.v[i], p->bright);
+            else if (p->engine == ENGINE_SAMPLE) smp_start(&sv[i], E.v[i].m);
             midi_voice_on(i);
         }
     }
@@ -718,6 +819,7 @@ void eng_init(void)
     zero(&E, sizeof E);
     zero(ks_buf, sizeof ks_buf);
     zero(lks_buf, sizeof lks_buf);
+    zero(sv, sizeof sv);
     zero(ch_buf, sizeof ch_buf);
     zero(lr_line, sizeof lr_line);
     zero(lr_ap0, sizeof lr_ap0);
@@ -804,7 +906,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float sAmp = kt->s_clap > 0.5f ? 1.1f : 0.95f;                          /* a clap's bursts lose a bit: louder */
         const float dspace = kt->space;
         const int eng = p->engine;
-        const float lvl = p->level * (eng == ENGINE_FM ? 0.16f : eng == ENGINE_PLUCK ? 0.30f : 0.11f) * E.clev;
+        const float lvl = p->level * (eng == ENGINE_FM ? 0.16f : eng == ENGINE_PLUCK ? 0.30f : eng == ENGINE_SAMPLE ? 0.38f : 0.11f) * E.clev;
         const float kdamp = 1.0f / fm_maxf(0.3f, E.q);
         const float ang = E.rev * 1.5707963f;
         const float dry = fm_maxf(0.18f, fm_cosf(ang)), rsend = fm_sinf(ang) * 1.1f;
@@ -814,7 +916,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float lfC = fm_expf(-1.0f / (fm_maxf(0.01f, E.lp.fdec) * SR * 0.33f));
         const float liC = fm_expf(-1.0f / (fm_maxf(0.01f, E.lp.idec) * SR * 0.33f));   /* the melody's FM index */
         const int leng = E.lp.engine;
-        const float lgain = leng == ENGINE_FM ? 0.256f : leng == ENGINE_PLUCK ? 0.7f : 0.176f;
+        const float lgain = leng == ENGINE_FM ? 0.256f : leng == ENGINE_PLUCK ? 0.7f : leng == ENGINE_SAMPLE ? 0.5f : 0.176f;
         const float rv_damp = 0.575f;             /* ~6 kHz in the reverb's loop */
 
         for (c0 = 0; c0 < n; c0 += CHUNK) {
@@ -837,6 +939,9 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 if (leng == ENGINE_FM) {
                     ldi1 = mtof(lm) / SR;
                     ldi2 = ldi1 * E.lp.ratio;
+                } else if (leng == ENGINE_SAMPLE) {
+                    if (E.ld_exc) smp_start(&sv[4], lm);
+                    ldL = sv[4].on ? smp_rate(&sv[4], lm) : 0.0f;
                 } else if (leng == ENGINE_PLUCK) {
                     ldL = fm_minf(SR / mtof(lm), (float)(KS_N - 4u));
                     if (E.ld_exc) excite_buf(lks_buf, E.ld_w, lm, E.lp.bright);
@@ -864,8 +969,10 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 } else if (eng == ENGINE_FM) {
                     incc[i] = mtof(m) / SR;
                     incm[i] = incc[i] * p->ratio;
-                } else {
+                } else if (eng == ENGINE_PLUCK) {
                     ksL[i] = fm_minf(SR / mtof(m), (float)(KS_N - 4u));
+                } else {
+                    ksL[i] = sv[i].on ? smp_rate(&sv[i], m) : 0.0f;   /* (the sample's step) */
                 }
             }
             if (E.binc != 0.0f) {
@@ -989,8 +1096,10 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                                 inc2[i] = mtof(m + p->oct2 + p->det * 0.005f) / SR;
                             } else if (eng == ENGINE_FM) {
                                 incc[i] = mtof(m) / SR; incm[i] = incc[i] * p->ratio;
-                            } else {
+                            } else if (eng == ENGINE_PLUCK) {
                                 ksL[i] = fm_minf(SR / mtof(m), (float)(KS_N - 4u));
+                            } else {
+                                ksL[i] = sv[i].on ? smp_rate(&sv[i], m) : 0.0f;
                             }
                         }
                         binc = mtof(E.bm) / SR;
@@ -1004,6 +1113,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         E.sdel[i] -= 1.0f;
                         if (E.sdel[i] <= 0.0f) {
                             if (eng == ENGINE_PLUCK) excite(v, p->bright);
+                            else if (eng == ENGINE_SAMPLE) smp_start(&sv[i], v->m);
                             midi_voice_on((int)i);
                         }
                     }
@@ -1018,6 +1128,9 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         vo = fm_sin_turns(v->pc + mod * 0.15915494f);
                         v->pc += incc[i]; if (v->pc >= 1.0f) v->pc -= 1.0f;
                         v->pm += incm[i]; if (v->pm >= 1.0f) v->pm -= 1.0f;
+                    } else if (eng == ENGINE_SAMPLE) {
+                        if (ksL[i] == 0.0f && sv[i].on) ksL[i] = smp_rate(&sv[i], v->m + wob);   /* (started in this chunk) */
+                        vo = smp_tick(&sv[i], ksL[i]);
                     } else {
                         float *b = ks_buf[i];
                         float x = rd_line(b, KS_N, v->w, ksL[i]);
@@ -1198,6 +1311,8 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         E.ld_ph1 += ldi1; if (E.ld_ph1 >= 1.0f) E.ld_ph1 -= 1.0f;
                         E.ld_pm += ldi2; if (E.ld_pm >= 1.0f) E.ld_pm -= 1.0f;
                         E.ld_ie *= liC;
+                    } else if (leng == ENGINE_SAMPLE) {
+                        lv = smp_tick(&sv[4], ldL);
                     } else if (leng == ENGINE_PLUCK) { /* its own plucked string */
                         float x = rd_line(lks_buf, KS_N, E.ld_w, ldL);
                         lks_buf[E.ld_w] = q->damp * 0.5f * (x + E.ld_last) + 1e-15f;

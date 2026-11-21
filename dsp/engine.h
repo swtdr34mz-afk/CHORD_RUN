@@ -10,7 +10,7 @@
 
 #define ENG_SR 44100.0f
 
-enum { ENGINE_SUB, ENGINE_FM, ENGINE_PLUCK };
+enum { ENGINE_SUB, ENGINE_FM, ENGINE_PLUCK, ENGINE_SAMPLE };   /* SAMPLE: the sampled piano (eng_samples) */
 enum { W_SAW, W_SQUARE, W_TRI, W_SINE };
 
 typedef struct {
@@ -56,6 +56,9 @@ enum { BASS_OFF, BASS_SUB, BASS_ROND, BASS_ACID, BASS_REESE, BASS_PLUCK, BASS_FM
 enum { MOTIF_SUIT, MOTIF_TENUE, MOTIF_CONTRE, MOTIF_OCTAVES, MOTIF_UN, MOTIF_GALOP, MOTIF_SYNCOPE, MOTIF_ROULE, NMOTIF };
 
 void eng_init(void);
+/* the sampled piano's notes (the resource region's payload, tools/make_piano.py); 1 = taken, 0 = none there (a sound on
+ * ENGINE_SAMPLE then stays silent: the app picks another) */
+int eng_samples(const uint8_t *p, uint32_t len);
 void eng_sound(const sound_t *p);
 void eng_rhythm(const rhythm_t *r);
 void eng_chord(const float notes[4], float bass, float glide_s);

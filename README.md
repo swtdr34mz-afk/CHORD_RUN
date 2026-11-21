@@ -13,8 +13,9 @@ Play a song's chords with one finger and a melody over them, while a little runn
 - **Melody:** the **white keys** play the song's scale from its tonic, fitted to the chord that plays (a key keeps its
   note when the chord changes, or moves a semitone). ASSIST (MELODY 2) lights up the chord's notes on the beat, or GUIDE:
   a melody made for each song (an original one, not the record's) that lights up key by key, to play along.
-- **Sounds:** 23 sounds in five families: ambient pads, soft keys, plucks (guitar, mallet, kalimba), keys (e-piano,
-  grand keys) and synths (80s brass, supersaw, pocket lead, an Oberheim-ish brass pad and brass lead).
+- **Sounds:** 24 sounds in five families: ambient pads, soft keys, plucks (guitar, mallet, kalimba), keys (e-piano,
+  grand keys and a **sampled GRAND PIANO**: the Salamander Grand Piano by Alexander Holm, CC-BY 3.0) and synths (80s
+  brass, supersaw, pocket lead, an Oberheim-ish brass pad and brass lead).
 - **Drums:** twelve styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
   dreamcore, angelcore, hip hop and 80s pop (808s, metal hi-hats with rolls, claps, cowbell, washed snares).
 - **Loop:** press REC, play 4 bars of chords, and they play round while you play the melody on top.
@@ -65,6 +66,7 @@ Locally (Linux x86-64), the simulator and its tests:
 
 ## Licence and credits
 
-GPL-3.0-only (see `LICENSE`), as Blop / OSR-1 it is based on. fm1-base and felucca-bsp stay under MPL-2.0. The
+GPL-3.0-only (see `LICENSE`), as Blop / OSR-1 it is based on. The grand piano's samples (`res/piano.bin`, kept in the
+FM-1's resource region; `tools/make_piano.py` makes them) are the Salamander Grand Piano V3 by Alexander Holm, CC-BY 3.0. fm1-base and felucca-bsp stay under MPL-2.0. The
 installable package carries three files of JieLi's AC79 SDK (Apache-2.0). Every borrowed part is listed in
 `CREDITS.md`.

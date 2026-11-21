@@ -23,7 +23,16 @@ expect active 0
 turn SELECT 3
 wait 30
 expect grid 3
-expect sound 17
+expect sound 23
+expect piano 1
+# the sampled grand: a chord, held
+key 1 down
+wait 30
+wav piano.wav
+wait 2500
+wavstop
+key 1 up
+wait 600
 expect bpm 93
 expect msound 11
 turn ALGO 2
@@ -208,7 +217,7 @@ wait 300
 expect rhythm 0
 shot sleep.png
 # sounds: a plucked guitar with the arpeggiator (the ARP page: MODE UP, RATE 1/8 T), an FM e-piano
-turn PRESET -4
+turn PRESET -10
 wait 30
 expect sound 13
 tap ARP
@@ -288,7 +297,7 @@ wait 2000
 release REC
 release HOME
 wait 100
-expect sound 17
+expect sound 23
 expect grid 0
 expect page 0
 expect loop 0

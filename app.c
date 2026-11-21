@@ -367,15 +367,22 @@ static void spread(float *n, int mode)   /* SERRE as is, OUVERT drop 2, LARGE dr
 /* the melody voice (white keys): its preset (0 = the chords' sound), cutoff (50 = as the sound is made), level, and SPACE,
  * one knob for a few effects: up to 40 % a reverb that grows (a light tail), then echoes (the ping-pong delay, in time) join
  * in and the reverb grows on to big and airy */
+static uint8_t piano_ok;                 /* the grand piano's samples are there (the resource region) */
+/* a sound as played: the sampled piano without its samples (an FM-1 updated without the region) is GRAND KEYS */
+static const sound_t *snd_at(int i)
+{
+    const sound_t *p = &SOUNDS[i];
+    return p->engine == ENGINE_SAMPLE && !piano_ok ? &SOUNDS[17] : p;
+}
 static void send_lead(void)
 {
     float hz = 70.0f * fm_powf(12000.0f / 70.0f, (float)set.mcut * 0.01f), sp = (float)set.mrev * 0.01f;
     float rev = fm_minf(1.0f, sp * 1.35f), del = sp <= 0.4f ? 0.0f : (sp - 0.4f) * (0.5f / 0.6f);
-    eng_lead_sound(set.msound ? &SOUNDS[set.msound - 1] : &SOUNDS[set.sound]);
+    eng_lead_sound(snd_at(set.msound ? set.msound - 1 : set.sound));
     eng_lead_params(hz, (float)set.mlev * 0.0125f, rev, del);
     eng_lead_mod((float)set.mglide * 0.015f, (float)set.mvib * 0.01f);    /* glide up to 0.6 s (as GLIDE shows it) */
 }
-static void send_sound(void) { eng_sound(&SOUNDS[set.sound]); send_lead(); }
+static void send_sound(void) { eng_sound(snd_at(set.sound)); send_lead(); }
 static void send_rhythm(void)
 {
     rhythm_t r;
@@ -618,15 +625,8 @@ static int settings_ok(void)
 }
 
 /* ------------------------------------------------------------------ platform contract --- */
-static void game_init(void);
-void app_init(void)
+static void settings_load(void)
 {
-    int g;
-    msound_name[0] = "AS CHORDS";
-    for (g = 0; g < NSOUND; g++) msound_name[g + 1] = SOUND_NAME[g];
-    for (g = 0; g < NGRID; g++) {
-        grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
-    }
     {
         int n = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
         int v8 = (int)((const uint8_t *)&set.aflow - (const uint8_t *)&set), v9 = (int)((const uint8_t *)&set.aswing - (const uint8_t *)&set);
@@ -646,8 +646,25 @@ void app_init(void)
     }
     if (set.magic != SET_MAGIC || !settings_ok())
         settings_defaults();
+}
+
+static void game_init(void);
+void app_init(void)
+{
+    int g;
+    msound_name[0] = "AS CHORDS";
+    for (g = 0; g < NSOUND; g++) msound_name[g + 1] = SOUND_NAME[g];
+    for (g = 0; g < NGRID; g++) {
+        grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
+    }
+    settings_load();
     game_init();
     eng_init();
+    {
+        uint32_t rl = 0;
+        const uint8_t *rp = plat_res(&rl);
+        piano_ok = (uint8_t)eng_samples(rp, rl);
+    }
     send_sound();
     send_rhythm();
     send_groove();
@@ -1268,6 +1285,23 @@ static void guide_press(int k, uint32_t now)
 }
 
 static uint32_t as_at, as_keys;          /* ASSIST: when its keys were found, and they */
+
+/* ------------------------------------------------------------------ backup and restore over USB (fm1-base backup.c) --- */
+static uint8_t bk_hold;                  /* a backup streams: no saving */
+int app_backup_playing(void) { return active || lp.st == LP_PLAY || lp.st == LP_REC; }
+void app_backup_flush(void)
+{
+    if (set_dirty && plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) set_dirty = 0;
+    if (prog_dirty) { prog.magic = PROG_MAGIC; if (plat_store_save(OBJ_PROGRESS, &prog, sizeof prog) == 0) prog_dirty = 0; }
+}
+void app_backup_hold(int on) { bk_hold = (uint8_t)(on != 0); }
+static void settings_load(void);
+void app_backup_restored(void)           /* everything from the flash again, as at power-on */
+{
+    settings_load();
+    game_init();
+    send_sound(); send_rhythm(); send_groove(); send_cfx(); send_drums(); send_bass(); send_fx(); send_params();
+}
 static int as_slot = -1, as_grid = -1;
 static void input(void)
 {
@@ -1356,12 +1390,12 @@ static void input(void)
     ui.keys = keys;
     ui.btn = btn;
     /* auto-save: 4 s after the last change, and never while a chord plays (a flash write stops the sound) */
-    if (set_dirty && !active && lp.st != LP_PLAY && plat_ms() - dirty_at > 4000u) {
+    if (set_dirty && !bk_hold && !active && lp.st != LP_PLAY && plat_ms() - dirty_at > 4000u) {
         if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) set_dirty = 0;
         else dirty_at = plat_ms();
     }
     /* the progress too: after 4 s of quiet (no chord, no melody, no loop) */
-    if (prog_dirty && !active && !ld_held && lp.st != LP_PLAY && lp.st != LP_REC && now - run.busy_at > 4000u) {
+    if (prog_dirty && !bk_hold && !active && !ld_held && lp.st != LP_PLAY && lp.st != LP_REC && now - run.busy_at > 4000u) {
         prog.magic = PROG_MAGIC;
         if (plat_store_save(OBJ_PROGRESS, &prog, sizeof prog) == 0) prog_dirty = 0;
         else run.busy_at = now;
@@ -1654,7 +1688,7 @@ static void neon_splash(int bottom)
     float ms = sc.title_ms, e = ease3((ms - 100.0f) / 1100.0f);
     uint32_t now = plat_ms(), t = (uint32_t)(ms < 0.0f ? 0.0f : ms);
     int ty, cx;
-    char ln[24];
+    char ln[40];
     g_oy = bottom ? 120 : 0;
     neon_sky(hy, now);
     neon_sun(120, hy - 12 + (int)((1.0f - e) * 80.0f), 52, hy, now);
@@ -1676,7 +1710,7 @@ static void neon_splash(int bottom)
     }
     if (t > 1100u) {                                                    /* the credit, the author's own words in the help */
         NSR(0, 226, 240, 14, RGB(5, 9, 11));
-        ln[0] = 0; text_cat(ln, "BASED ON BLOP BY OBSIMO");
+        ln[0] = 0; text_cat(ln, (t / 3000u) % 2u ? "PIANO: SALAMANDER GRAND, A. HOLM" : "BASED ON BLOP BY OBSIMO");
         cv_text((240 - text_w(&FONT_XS, ln)) / 2, 226 - g_oy, &FONT_XS, ln, SOFT);
     }
     if (ui.help && t > 600u) {                                         /* the help (HOME held): the player's progress */
@@ -1886,6 +1920,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "carp")) *got = set.carp;
     else if (!strcmp(what, "cbass")) *got = set.cbass;
     else if (!strcmp(what, "crate")) *got = set.crate;
+    else if (!strcmp(what, "piano")) *got = piano_ok;
     else if (!strcmp(what, "assist_keys")) *got = (int)as_keys;
     else if (!strcmp(what, "guide_key")) *got = gd.key;
     else if (!strcmp(what, "guide_next")) *got = gd.next_key;

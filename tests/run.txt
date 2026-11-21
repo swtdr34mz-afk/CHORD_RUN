@@ -496,7 +496,7 @@ wait 600
 expect missions 7
 expect unlocked 5
 expect metres_h 15
-expect mission 7
+expect mission 8
 # HOME held: the progress
 press HOME
 wait 2500

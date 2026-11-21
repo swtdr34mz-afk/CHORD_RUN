@@ -11,7 +11,8 @@ Play a song's chords with one finger and a melody over them, while a little runn
 - **Songs:** 17 song sets. A song's chords sit on the **black keys** (left to right). Each song brings its own
   sounds, tempo, bass and drum style.
 - **Melody:** the **white keys** play the song's scale from its tonic, fitted to the chord that plays (a key keeps its
-  note when the chord changes, or moves a semitone). ASSIST (ARP) lights up the keys on the chord's notes, on the beat.
+  note when the chord changes, or moves a semitone). ASSIST (ARP) lights up the chord's notes on the beat, or GUIDE:
+  a melody made for each song (an original one, not the record's) that lights up key by key, to play along.
 - **Sounds:** 23 sounds in five families: ambient pads, soft keys, plucks (guitar, mallet, kalimba), keys (e-piano,
   grand keys) and synths (80s brass, supersaw, pocket lead, an Oberheim-ish brass pad and brass lead).
 - **Drums:** twelve styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
@@ -39,7 +40,7 @@ Play a song's chords with one finger and a melody over them, while a little runn
 | HOME | Back to the main page. Held: the title and your progress |
 | REC | The loop: ready → the first chord records 4 bars → it plays. Again: pause / play. Held 1 s: cleared |
 | SEQ | The next character (the unlocked ones) |
-| ARP | ASSIST on / off: the white keys on the chord's notes light up, on the beat |
+| ARP | ASSIST: off → CHORD (the white keys on the chord's notes light up, on the beat) → GUIDE (a melody made for each song lights up key by key in time, the next key softly; each hit gives 2 metres) |
 | SAVE | The music heard from outside the room |
 | PLAY | Hide the info |
 | OCT- / OCT+ | Octave |

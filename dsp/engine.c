@@ -114,6 +114,7 @@ static struct {
     int bl_kind;
     int step;
     float step_left;
+    volatile uint32_t bar;              /* bars begun (for the melody guide) */
     uint8_t clocked;                    /* an outside MIDI clock leads: the steps keep counting even with nothing playing */
     /* envelope */
     float e, vel, atk_s, rel_s;
@@ -260,6 +261,19 @@ int eng_last_hit(uint32_t *at_ms)
 }
 float eng_level(void) { return E.level; }
 static float step_len(int i);
+int eng_pos(int *step, float *frac, uint32_t *bar)
+{
+    int cur;
+    float len, f;
+    if (!E.running || E.last_step < 0) return 0;
+    cur = E.last_step;
+    len = step_len(cur);
+    f = len > 0.0f ? 1.0f - E.step_left / len : 0.0f;
+    *step = cur;
+    *frac = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
+    *bar = E.bar ? E.bar - 1u : 0u;
+    return 1;
+}
 float eng_beat(void)
 {
     int cur;
@@ -447,6 +461,7 @@ static void bass_hit(float gate_s, int oct)
 static void on_step(void)
 {
     int i = E.step, kick = 0;
+    if (i == 0) E.bar++;
     float sl = step_len(i);
     if (E.drums_on && E.active && !E.rh.hold) {      /* the drums play with a rhythm only */
         if (E.dr.k[i] > 0.0f) {

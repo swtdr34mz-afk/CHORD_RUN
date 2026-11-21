@@ -14,9 +14,33 @@ expect assist_keys 17371281
 shot assist.png
 key 1 up
 wait 50
+# ARP again: GUIDE, a melody made for the song: the key to play lights up in time (with a rhythm: on its steps)
+tap ARP
+wait 50
+expect assist 2
+turn ALGO 2
+wait 30
+key 1 down
+wait 30
+key 1 up
+wait 400
+shot guide.png
+expect guide_tap 1
+expect guide_tap 0
+wait 700
+expect guide_tap 1
+wait 700
+expect guide_tap 1
+expect guide_hits 3
 tap ARP
 wait 50
 expect assist 0
+key 1 down
+wait 30
+key 1 up
+turn ALGO -2
+wait 30
+expect active 0
 # BABY ONE MORE TIME (C minor): over Gsus4 the song's own notes (Ab, Bb, Eb); over G the leading tone B (harmonic minor)
 turn SELECT 3
 wait 50

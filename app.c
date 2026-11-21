@@ -23,7 +23,8 @@
  *   bottom row      HOME  back to the main page (held: the title and the player's progress)
  *                   SAVE  the music heard from outside the room
  *                   SEQ   the next character (the unlocked ones)   PLAY  hide the info
- *                   ARP   ASSIST: the white keys on the chord's notes light up, on the beat
+ *                   ARP   ASSIST: off / CHORD (the white keys on the chord's notes light up, on the beat) / GUIDE (a melody
+ *                         made for each song: the key to play lights up in time, the next one softly; a hit: 2 metres)
  *                   REC   the loop: ready, the first chord records 4 bars, then it plays round; REC again: close /
  *                         pause / play; held 1 s: gone
  *   OCT- / OCT+ octave.   HOME + REC held 3 s: back to the first-start settings (a countdown; the progress stays).
@@ -147,6 +148,7 @@ typedef struct { int root; int8_t iv[6]; int n; int bass_off; int oct; int shift
 #define KEY_C4 7                         /* key index of C4 (key 0 is F3) */
 /* The keys: the BLACK keys play the set's chords (the first 8, left to right), the WHITE keys play the melody. */
 static int8_t kb_black[32], kb_white[32];                      /* key -> chord slot (-1) / white-key number (-1) */
+static int8_t kb_wkey[32];                                      /* white-key number -> its key */
 static uint8_t kb_ready;
 static int last_slot = -1;                                      /* the chord the melody follows (the last one played) */
 static uint32_t ld_held;                                        /* the white keys held */
@@ -160,7 +162,7 @@ static void kb_init(void)
         int pos = (((k - KEY_C4) % 12) + 12) % 12, blk = 0;
         for (i = 0; i < 5; i++) if (BLACK_IDX[i] == pos) blk = 1;
         if (blk) { kb_black[k] = (int8_t)(nb < 8 ? nb : -1); nb++; }
-        else kb_white[k] = (int8_t)nw++;
+        else { kb_wkey[nw] = (int8_t)k; kb_white[k] = (int8_t)nw++; }
     }
     kb_ready = 1;
 }
@@ -542,6 +544,7 @@ static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT,
 static const uint8_t PAGE_RGB[NPAGE][3] = {{200, 255, 60}, {120, 200, 255}, {255, 190, 90}, {255, 120, 90},
                                           {110, 240, 190}, {210, 170, 255}, {255, 150, 120}, {210, 170, 255}};
 static const char *const MOCT_NAME[5] = {"-2", "-1", "0", "+1", "+2"};
+static const char *const ASSIST_NAME[3] = {"OFF", "CHORD", "GUIDE"};
 
 enum { KD_PCT, KD_OFF, KD_GLIDE, KD_BPM, KD_BIP, KD_LIST };
 enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL, G_MELODY };
@@ -568,7 +571,7 @@ static const kdef_t KD[NPAGE][4] = {
     {{"STYLE", &set.dpat, 0, NDRUM - 1, KD_LIST, G_DRUMS, DRUM_NAME}, {"KICK", &set.dkick, 0, 100, KD_OFF, G_DRUMS, 0},
      {"HATS", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"SNARE", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
     {{"GLIDE", &set.mglide, 0, 40, KD_GLIDE, G_MELODY, 0}, {"OCTAVE", &set.moct, 0, 4, KD_LIST, G_MELODY, MOCT_NAME},
-     {"VIBRATO", &set.mvib, 0, 100, KD_OFF, G_MELODY, 0}, {"ASSIST", &set.assist, 0, 1, KD_LIST, G_NONE, ONOFF_NAME}},
+     {"VIBRATO", &set.mvib, 0, 100, KD_OFF, G_MELODY, 0}, {"ASSIST", &set.assist, 0, 2, KD_LIST, G_NONE, ASSIST_NAME}},
 };
 
 static int settings_ok(void)
@@ -776,7 +779,7 @@ typedef struct {
 static prog_t prog;
 static uint8_t prog_dirty;
 
-enum { MS_CHORDS, MS_NOTES, MS_RUN, MS_SONGS, MS_ALL, MS_DRUMS, MS_LOOP, MS_TOTAL, NMS };
+enum { MS_CHORDS, MS_NOTES, MS_RUN, MS_SONGS, MS_ALL, MS_DRUMS, MS_LOOP, MS_TOTAL, MS_GUIDE, NMS };
 static const struct { const char *a, *b; uint16_t base, step, cap; } MISSION[NMS] = {
     {"PLAY ", " CHORDS", 24, 12, 96},
     {"PLAY ", " NOTES", 40, 20, 160},
@@ -786,8 +789,9 @@ static const struct { const char *a, *b; uint16_t base, step, cap; } MISSION[NMS
     {"JAM ", " S WITH DRUMS", 45, 15, 180},
     {"RECORD A LOOP (REC)", "", 1, 0, 1},
     {"RUN ", " M", 400, 200, 2000},
+    {"HIT ", " LIT KEYS (ARP)", 20, 10, 80},
 };
-static const uint8_t MS_ORDER[NMS] = {MS_CHORDS, MS_NOTES, MS_RUN, MS_SONGS, MS_ALL, MS_DRUMS, MS_LOOP, MS_TOTAL};
+static const uint8_t MS_ORDER[NMS] = {MS_CHORDS, MS_NOTES, MS_RUN, MS_SONGS, MS_ALL, MS_DRUMS, MS_LOOP, MS_GUIDE, MS_TOTAL};
 
 static struct {
     float speed, run_m, carry, scroll;          /* m/s now, this run's metres, a part metre not yet counted, the ground's scroll (px) */
@@ -1081,8 +1085,8 @@ static void button(int k)
         break;
     }
     case B_ARP:                                  /* ASSIST: the white keys that fit the chord light up, on the beat */
-        set.assist ^= 1u;
-        app_say("ASSIST", set.assist ? "THE GOOD NOTES LIGHT UP" : "OFF");
+        set.assist = (uint8_t)((set.assist + 1u) % 3u);
+        app_say("ASSIST", set.assist == 2 ? "GUIDE - PLAY THE LIT KEY" : set.assist ? "THE CHORD'S NOTES LIGHT UP" : "OFF");
         break;
     case B_PLAY: fun(k); return;
     case B_OCTDN:
@@ -1107,6 +1111,114 @@ static uint32_t valid_keys(void)
     return m;
 }
 
+/* ------------------------------------------------------------------ the melody guide (ASSIST: GUIDE) --- */
+/* Each song gets a melody of its own, made here from the song's number (an original tune that fits, not the record's): two bars
+ * of a rhythm (the second often the same, or a breath) and a line of white keys that moves mostly by step; on the strong beats it
+ * lands on the chord's notes. The key to play lights up in time, the next one softly; a hit (the lit key, in its time, or just
+ * before the next one) gives 2 metres. With a rhythm it follows the rhythm's own steps, without one the tempo from the chord. */
+#define GD_N 32
+static struct {
+    int8_t w[GD_N];                             /* the white key (number) a note starts on, -1 none */
+    int16_t grid;                               /* the song it was made for (-1 none yet) */
+    int16_t pos, next_pos, hit_pos;             /* the note under way, the next one (steps in the two bars), the last hit */
+    int8_t key, next_key;                       /* lit, lit softly (-1 none) */
+    uint8_t soon;                               /* the next note is a moment away (an early press counts for it) */
+    uint32_t hits;                              /* the lit keys hit since the start */
+} gd = {{0}, -1, -1, -1, -1, -1, -1, 0, 0};
+static const char *const GD_RHY[8] = {          /* one bar: x a note */
+    "x...x.x...x.x...", "x.x...x.x...x...", "..x.x...x.x.x...", "x...x...x.x.x.x.",
+    "x..x..x...x.x...", "x.x.x...x...x.x.", "...x..x.x...x...", "x...x.x.x.......",   /* (the last: a breath at the end) */
+};
+static uint32_t gd_rng;
+static uint32_t gd_rand(void) { gd_rng ^= gd_rng << 13; gd_rng ^= gd_rng >> 17; gd_rng ^= gd_rng << 5; return gd_rng; }
+
+static void guide_make(int grid)
+{
+    static const int8_t MV[8] = {-2, -1, -1, 0, 1, 1, 2, -1};
+    int i, b, w, ra;
+    gd_rng = 0x9E3779B9u ^ ((uint32_t)grid * 0x85EBCA6Bu + 0x1234567u);
+    for (i = 0; i < 6; i++) gd_rand();
+    w = 7 + (int)(gd_rand() % 3u);              /* around the octave above the tonic */
+    ra = (int)(gd_rand() % 7u);
+    for (b = 0; b < 2; b++) {
+        const char *r = GD_RHY[b == 0 ? ra : (gd_rand() & 1u) ? ra : 7];
+        for (i = 0; i < 16; i++) {
+            int st = b * 16 + i;
+            if (r[i] != 'x') { gd.w[st] = -1; continue; }
+            if (st) w += MV[gd_rand() % 8u];
+            if (w < 4) w = 5;
+            if (w > 12) w = 11;
+            gd.w[st] = (int8_t)w;
+        }
+    }
+    gd.grid = (int16_t)grid;
+}
+
+/* the key a guide note lights: on a strong beat (or a bar's first note) the nearest white key on the chord's notes */
+static int guide_key(int pos)
+{
+    int w = gd.w[pos], i;
+    static const int8_t D[5] = {0, -1, 1, -2, 2};
+    if (pos % 4 == 0 || pos == 0 || pos == 16) {
+        uint16_t ct = chord_tones(last_slot);
+        for (i = 0; i < 5; i++) {
+            int ww = w + D[i];
+            if (ww >= 0 && ww < 16 && ((ct >> ((int)mel_pitch(ww) % 12)) & 1u)) { w = ww; break; }
+        }
+    }
+    return kb_wkey[w];
+}
+
+static void guide_tick(uint32_t now)
+{
+    static int last_cur = -1, last_slot_g = -1, last_grid = -1;
+    int st = 0, cur, i;
+    float fr = 0.0f;
+    uint32_t bar = 0;
+    if (set.assist != 2 || !active || last_slot < 0) {
+        gd.key = gd.next_key = -1; gd.pos = gd.next_pos = -1; gd.soon = 0; last_cur = -1;
+        return;
+    }
+    if (gd.grid != set.grid) guide_make(set.grid);
+    if (!eng_pos(&st, &fr, &bar)) {             /* no rhythm: by the tempo, from the chord's start */
+        float sm = step_ms(), t = (float)(now - chord_at) / sm;
+        uint32_t ti = (uint32_t)t;
+        st = (int)(ti % 16u); bar = ti / 16u; fr = t - (float)ti;
+    }
+    cur = (int)((bar & 1u) * 16u) + st;
+    if (cur == last_cur && last_slot == last_slot_g && set.grid == last_grid) {   /* the same step: only "soon" moves */
+        gd.soon = gd.next_pos == (cur + 1) % GD_N && fr > 0.55f;
+        return;
+    }
+    last_cur = cur; last_slot_g = last_slot; last_grid = set.grid;
+    gd.key = gd.next_key = -1; gd.pos = gd.next_pos = -1; gd.soon = 0;
+    for (i = 0; i < 4; i++) {                   /* the note under way: the last start, at most 4 steps back */
+        int p = (cur - i + GD_N) % GD_N;
+        if (gd.w[p] >= 0) { gd.pos = (int16_t)p; break; }
+    }
+    for (i = 1; i <= 8; i++) {                  /* the next one */
+        int p = (cur + i) % GD_N;
+        if (gd.w[p] >= 0) { gd.next_pos = (int16_t)p; gd.soon = i == 1 && fr > 0.55f; break; }
+    }
+    if (gd.pos >= 0) gd.key = (int8_t)guide_key(gd.pos);
+    if (gd.next_pos >= 0) gd.next_key = (int8_t)guide_key(gd.next_pos);
+}
+
+/* a white key pressed: the lit one (or the next, a moment early) is a hit */
+static void guide_press(int k, uint32_t now)
+{
+    int p = -1;
+    if (set.assist != 2 || !active) return;
+    if (gd.pos >= 0 && k == gd.key && gd.hit_pos != gd.pos) p = gd.pos;
+    else if (gd.soon && gd.next_pos >= 0 && k == gd.next_key && gd.hit_pos != gd.next_pos) p = gd.next_pos;
+    if (p < 0) return;
+    gd.hit_pos = (int16_t)p;
+    gd.hits++;
+    hop_at = now;
+    add_metres(2u);
+    if (run.mtype == MS_GUIDE) { run.mprog += 1.0f; mission_check(); }
+}
+
 static uint32_t as_at, as_keys;          /* ASSIST: when its keys were found, and they */
 static int as_slot = -1, as_grid = -1;
 static void input(void)
@@ -1121,6 +1233,7 @@ static void input(void)
         if ((keys & bit) && !(ui.keys & bit)) {
             ld_held |= bit; ld_cur = (int)k; hop_at = now; eng_lead(mel_pitch(kb_white[k]));
             game_note();
+            guide_press((int)k, now);
         } else if (!(keys & bit) && (ui.keys & bit)) {
             ld_held &= ~bit;
             if (ld_cur == (int)k) {
@@ -1152,6 +1265,7 @@ static void input(void)
     if (!((btn >> B_REC) & 1u) && ((ui.btn >> B_REC) & 1u) && !((btn >> B_HOME) & 1u) && !ui.reset_at) lp_button(0, now);
     if (((btn >> B_REC) & 1u) && !((btn >> B_HOME) & 1u)) lp_hold(now);
     lp_tick(now);
+    guide_tick(now);
     /* HOME + REC held 3 s: back to the settings of the first start (a countdown; let go before: nothing) */
     if (((btn >> B_HOME) & 1u) && ((btn >> B_REC) & 1u)) {
         uint32_t held;
@@ -1215,7 +1329,10 @@ static void input(void)
     if (ui.clean) lit_btn |= LED_PLAY_GREEN;
     if (set.assist) lit_btn |= 1u << B_ARP;
     /* ASSIST: while a chord plays, the white keys on its notes light up, fully on each beat's first half, softer after */
-    if (set.assist && active && last_slot >= 0) {
+    if (set.assist == 2) {                      /* GUIDE: the key to play, the next one softly */
+        if (gd.key >= 0) lit_keys |= 1u << (uint32_t)gd.key;
+        if (gd.next_key >= 0 && gd.next_key != gd.key) mid_keys |= 1u << (uint32_t)gd.next_key;
+    } else if (set.assist && active && last_slot >= 0) {
         uint16_t ct = chord_tones(last_slot);
         float bpm = ck_bpm > 0.0f ? ck_bpm : (float)set.bpm;
         uint32_t beat = (uint32_t)(60000.0f / bpm), on = beat ? (now - chord_at) % beat < beat / 2u : 1u;
@@ -1591,6 +1708,10 @@ static void draw_screen(int bottom)
         cv_text(232 - text_w(&FONT_XS, t), 0, &FONT_XS, t, ACC1);
     }
     cv_rect(8, 22, 224, 1, PU);
+    if (lp.st == LP_OFF && set.assist == 2) {   /* GUIDE: the lit keys hit */
+        t[0] = 0; text_cat(t, "GUIDE  HITS "); int_text((int32_t)gd.hits, b); text_cat(t, b);
+        cv_text(232 - text_w(&FONT_T, t), 11, &FONT_T, t, ACC1);
+    }
     if (lp.st != LP_OFF) {   /* the loop: its state at the right, under the key; its round as a bar on the line */
         uint16_t lc = lp.st == LP_REC ? ACC2 : lp.st == LP_PLAY ? ACC1 : L;
         float pos = 0.0f;
@@ -1710,6 +1831,14 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "loop")) *got = lp.st;
     else if (!strcmp(what, "assist")) *got = set.assist;
     else if (!strcmp(what, "assist_keys")) *got = (int)as_keys;
+    else if (!strcmp(what, "guide_key")) *got = gd.key;
+    else if (!strcmp(what, "guide_next")) *got = gd.next_key;
+    else if (!strcmp(what, "guide_hits")) *got = (int)gd.hits;
+    else if (!strcmp(what, "guide_tap")) {      /* (a test's finger on the lit key: 1 = a hit) */
+        uint32_t h = gd.hits;
+        if (gd.key >= 0) guide_press(gd.key, plat_ms());
+        *got = (int)(gd.hits - h);
+    }
     else if (!strcmp(what, "loopn")) *got = lp.n;
     else if (!strcmp(what, "metres")) *got = (int)prog.metres;
     else if (!strcmp(what, "metres_h")) *got = (int)(prog.metres / 100u);   /* (hundreds: the run's own metres vary) */

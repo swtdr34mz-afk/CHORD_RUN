@@ -88,4 +88,6 @@ void eng_render(int32_t *lr, uint32_t n, float gain);
 int eng_last_step(uint32_t *at_ms, int *kick);
 int eng_last_hit(uint32_t *at_ms);
 float eng_beat(void);                  /* where the rhythm is in its beat, 0..1 (-1: it does not run) */
+int eng_pos(int *step, float *frac, uint32_t *bar);   /* the rhythm's place: the step under way (0..15), how far into it
+                                                          (0..1), the bars begun; 0 when it does not run */
 float eng_level(void);                 /* output level, 0..1, smoothed */

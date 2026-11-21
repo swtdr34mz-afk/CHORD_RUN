@@ -9,6 +9,7 @@
  *   black keys      the song's chords (left to right, up to 8). With a rhythm the chord keeps playing (latch): the same
  *                   key again stops it; without one (HELD) it plays while the key is down; FULL: held, latched, with the
  *                   drums. The black keys right of the chords: melody keys, the semitone above the white key to their left
+ *                   (softly lit when the note fits the chord, dark when it rubs)
  *   white keys      the melody, in the scale of the chord that played last (its own sound, MELODY page)
  *   SELECT song (its own sounds, tempo and drums come with it)   ALGORITHM chord rhythm   PRESET the chords' sound
  *   K1..K4          the page's four settings, always shown at the bottom of the screen
@@ -1332,6 +1333,26 @@ static void guide_press(int k, uint32_t now)
 }
 
 static uint32_t as_at, as_keys;          /* ASSIST: when its keys were found, and they */
+static uint32_t bf_at, bf_keys;          /* the melody's black keys that fit the chord: when they were found, and they */
+static int bf_slot = -2, bf_grid = -1;
+/* A melody black key fits the chord when its note is one of the chord's or is not a semitone above one of them: a note a
+ * semitone over a chord note rubs against it (C# over C, Ab over C's G, F over E: the "avoid notes"); the others are colour
+ * (Bb over C: its 7th, F# over A minor: the dorian 6th, Eb over C: the blue third) */
+static uint32_t black_fit_keys(void)
+{
+    int k, slot = last_slot;
+    uint32_t m = 0;
+    uint16_t ct;
+    if (slot < 0 || slot >= (int)grid_n[set.grid]) slot = 0;
+    ct = chord_tones(slot);
+    for (k = 0; k < NKEYS; k++) {
+        int pc;
+        if (!mel_black(k)) continue;
+        pc = (((int)key_pitch(k) % 12) + 12) % 12;
+        if (((ct >> pc) & 1u) || !((ct >> ((pc + 11) % 12)) & 1u)) m |= 1u << k;
+    }
+    return m;
+}
 
 /* ------------------------------------------------------------------ backup and restore over USB (fm1-base backup.c) --- */
 static uint8_t bk_hold;                  /* a backup streams: no saving */
@@ -1472,6 +1493,13 @@ static void input(void)
         }
         if (on) lit_keys |= as_keys; else mid_keys |= as_keys & ~lit_keys;
     }
+    /* the melody's black keys (right of the chords): softly lit when their note fits the chord the melody follows, dark when it
+     * rubs (better not) */
+    if (now - bf_at > 30u || bf_slot != last_slot || bf_grid != set.grid) {
+        bf_at = now; bf_slot = last_slot; bf_grid = set.grid;
+        bf_keys = black_fit_keys();
+    }
+    mid_keys |= bf_keys & ~lit_keys;
     /* OCT- / OCT+: lit on the side the octave went, blinking at two octaves */
     if (set.octave) {
         uint32_t ob = 1u << (set.octave < 0 ? B_OCTDN : B_OCTUP);
@@ -1965,6 +1993,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "bsound")) *got = set.bsound;
     else if (!strcmp(what, "reverb")) *got = set.reverb;
     else if (!strncmp(what, "mel", 3) && what[3] >= '0' && what[3] <= '9') *got = (int)mel_pitch(atoi(what + 3));   /* a white key's note now */
+    else if (!strcmp(what, "black_fit")) *got = (int)black_fit_keys();
     else if (!strncmp(what, "kp", 2) && what[2] >= '0' && what[2] <= '9')    /* a key's melody note now (-1: a chord key) */
         *got = mel_key(atoi(what + 2)) ? (int)key_pitch(atoi(what + 2)) : -1;
     else if (!strcmp(what, "loop")) *got = lp.st;

@@ -18,6 +18,17 @@ expect lead 1
 key 10 up
 wait 30
 expect lead 0
+# they light softly when their note fits the chord: over C, Bb and Eb (C#, F and Ab rub: a semitone over C, E, G)
+expect black_fit 4228096
+key 1 up
+key 5 down
+wait 50
+# over A minor: Eb and Ab (Bb, C# and F rub)
+expect black_fit 1081344
+shot black_fit.png
+key 5 up
+key 1 down
+wait 50
 # ASSIST (MELODY 2, K4): the white keys on the chord's notes (C E G) light up
 tap EDIT
 tap EDIT

@@ -13,6 +13,22 @@ expect character 1
 tap SEQ
 wait 30
 expect character 0
+# the melody keys keep their notes when the chord changes (LET IT BE, C: white key 3 = F4 = 65, over C, G and Am)
+key 1 down
+wait 50
+expect mel3 65
+expect mel0 60
+key 1 up
+key 3 down
+wait 50
+expect mel3 65
+key 3 up
+key 5 down
+wait 50
+expect mel3 65
+expect mel0 60
+key 5 up
+wait 50
 # mission 1: play 24 chords (no rhythm: a press each)
 key 1 down
 wait 150

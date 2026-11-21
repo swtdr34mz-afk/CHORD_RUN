@@ -174,15 +174,18 @@ static int key_slot(int key, int *var, int *oct)
     return s >= 0 && s < (int)grid_n[set.grid] ? s : -1;
 }
 
-/* The melody: white key number w -> a MIDI pitch, in the scale of the chord that last played. The scale is the mode of that chord
- * (by its quality) that fits the song's own key best, so the melody follows the harmony and stays in the song. */
+/* The melody: white key number w -> a MIDI pitch. Each white key has its own note in the SONG's scale (from the song's tonic,
+ * leftmost key; the same for every chord), and that note follows the chord that played last: the chord's scale is the mode of
+ * that chord (by its quality) that fits the song's key best; a note that is not in it moves one semitone, to a chord tone
+ * if one is there, else down. So a key keeps its note when the chord changes, or moves a semitone at most. */
 static const int8_t MODES[7][7] = {{0,2,4,5,7,9,11}, {0,2,3,5,7,9,10}, {0,1,3,5,7,8,10}, {0,2,4,6,7,9,11},
                                    {0,2,4,5,7,9,10}, {0,2,3,5,7,8,10}, {0,1,3,5,6,8,10}};   /* ionian dorian phrygian lydian mixolydian aeolian locrian */
 static float mel_pitch(int w)
 {
-    int n = grid_n[set.grid], slot = last_slot, root, minor, cand[3], nc, i, j, best = 0, bs = -1, base, deg, p;
+    int n = grid_n[set.grid], slot = last_slot, root, minor, cand[3], nc, i, j, best = 0, bs = -1, base, deg, p, pc, nt;
     const chord_def_t *d;
-    uint16_t song = 0;
+    uint16_t song = 0, sc = 0, ct = 0;
+    int8_t iv[6];
     if (slot < 0 || slot >= n) slot = 0;
     d = &grid_w[set.grid][slot];
     root = (set.key + d->semi) % 12;
@@ -196,13 +199,22 @@ static float mel_pitch(int w)
     default: cand[0] = 0; cand[1] = 3; cand[2] = 4; nc = 3; break;
     }
     for (j = 0; j < nc; j++) {
-        int sc = 0;
-        for (i = 0; i < 7; i++) sc += (song >> ((root + MODES[cand[j]][i]) % 12)) & 1;
-        if (sc > bs) { bs = sc; best = cand[j]; }
+        int s2 = 0;
+        for (i = 0; i < 7; i++) s2 += (song >> ((root + MODES[cand[j]][i]) % 12)) & 1;
+        if (s2 > bs) { bs = s2; best = cand[j]; }
     }
-    base = 60 + root - (root >= 6 ? 12 : 0) + set.octave * 12;
+    for (i = 0; i < 7; i++) sc |= (uint16_t)(1u << ((root + MODES[best][i]) % 12));
+    nt = quality_ivs(d->q, 0, iv);                                       /* the chord's own notes (its triad) */
+    for (i = 0; i < nt; i++) ct |= (uint16_t)(1u << ((root + iv[i]) % 12));
+    base = 60 + set.key - (set.key >= 6 ? 12 : 0) + set.octave * 12;   /* the leftmost white key: the song's tonic */
     deg = w < 0 ? 0 : w;
-    p = base + MODES[best][deg % 7] + 12 * (deg / 7);
+    p = base + MODES[minor ? 5 : 0][deg % 7] + 12 * (deg / 7);
+    pc = ((p % 12) + 12) % 12;
+    if (!((sc >> pc) & 1u)) {
+        int dn = (pc + 11) % 12, up = (pc + 1) % 12, in_dn = (sc >> dn) & 1u, in_up = (sc >> up) & 1u;
+        if (in_dn && in_up) p += (((ct >> up) & 1u) && !((ct >> dn) & 1u)) ? 1 : -1;
+        else p += in_up ? 1 : -1;
+    }
     while (p > 108) p -= 12;
     while (p < 36) p += 12;
     return (float)p;
@@ -2497,6 +2509,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "bsound")) *got = set.bsound;
     else if (!strcmp(what, "creature")) *got = set.creature;
     else if (!strcmp(what, "reverb")) *got = set.reverb;
+    else if (!strncmp(what, "mel", 3) && what[3] >= '0' && what[3] <= '9') *got = (int)mel_pitch(atoi(what + 3));   /* a white key's note now */
     else if (!strcmp(what, "loop")) *got = lp.st;
     else if (!strcmp(what, "loopn")) *got = lp.n;
     else if (!strcmp(what, "metres")) *got = (int)prog.metres;

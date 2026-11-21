@@ -33,8 +33,10 @@ typedef struct {
 } rhythm_t;
 
 typedef struct {                       /* a drum kit's sound */
-    float k_base, k_sweep, k_pdec, k_dec, k_drive;   /* kick: Hz, Hz added at the hit, its pitch drop (s), body (s) */
-    float h_tone, h_closed, h_open;                  /* hi-hat: 0 dark .. 1 bright, decays (s) */
+    float k_base, k_sweep, k_pdec, k_dec, k_drive;   /* kick: Hz, Hz added at the hit, its pitch drop (s), body (s), drive */
+    float k_hold, k_click;                           /* kick: full level for so long (s) before it decays, the beater's click 0..1 */
+    float h_tone, h_closed, h_open, h_metal;         /* hi-hat: 0 dark .. 1 bright, decays (s), metal (six square waves, as
+                                                        the classic drum machines) .. noise 0..1 */
     float r_f1, r_f2, r_dec, r_noise;                /* perc: two tones (Hz), decay (s), click (rim, clave, cowbell) */
     float s_tone, s_body, s_dec, s_snap, s_clap;     /* snare: body Hz, body amount 0..1, noise decay (s), brightness
                                                         0..1, clap (0 a snare, 1 three quick bursts) */

@@ -96,7 +96,9 @@ static struct {
     /* drums */
     drums_t dr;
     float dk, dh, dr_l, k_gain, h_env, h_gain, h_dec, h_lp, h_lp2, r_env, r_gain, r_ph1, r_ph2;
-    float s_env, s_tenv, s_gain, s_ph, s_lp, s_hp, s_clapt;   /* snare / clap */
+    float s_env, s_tenv, s_gain, s_ph, s_ph2, s_lp, s_hp, s_clapt;   /* snare / clap (s_lp, s_hp: its noise filter's state) */
+    float k_hold, k_cl, k_clph;                               /* kick: hold left (samples), its click */
+    float h_mph[6];                                           /* the hi-hat's six square waves */
     int s_clapn;
     float h_roll_left, h_roll_len, h_roll_g;                   /* hi-hat rolls: the hits left in the step */
     int h_roll;
@@ -434,6 +436,7 @@ static void on_step(void)
     if (E.drums_on && E.active && !E.rh.hold) {      /* the drums play with a rhythm only */
         if (E.dr.k[i] > 0.0f) {
             E.k_tail = E.k_last; E.k_ph = 0.0f; E.k_amp = 1.0f; E.k_pitch = 1.0f;
+            E.k_hold = E.dr.kit.k_hold * SR; E.k_cl = 1.0f; E.k_clph = 0.0f;
             E.k_gain = E.dr.k[i] * E.dk;
             E.duck_atk = 1;
             kick = 1;
@@ -452,7 +455,7 @@ static void on_step(void)
             }
         }
         if (E.dr.s[i] > 0.0f) {
-            E.s_env = 1.0f; E.s_tenv = 1.0f; E.s_gain = E.dr.s[i] * E.dr_l; E.s_ph = 0.0f;
+            E.s_env = 1.0f; E.s_tenv = 1.0f; E.s_gain = E.dr.s[i] * E.dr_l; E.s_ph = 0.0f; E.s_ph2 = 0.25f;
             E.s_clapn = E.dr.kit.s_clap > 0.5f ? 2 : 0;     /* a clap: two more bursts, 11 ms apart */
             E.s_clapt = 0.011f * SR;
         }
@@ -660,13 +663,21 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const kit_t *kt = &E.dr.kit;
         const float kDecay = fm_expf(-1.0f / (fm_maxf(0.01f, kt->k_dec) * SR));    /* the kick's body */
         const float kPdecay = fm_expf(-1.0f / (fm_maxf(0.002f, kt->k_pdec) * SR)); /* its pitch drop */
-        const float hpC = 0.25f + 0.55f * kt->h_tone;
+        const float hpC = 0.12f + 0.43f * kt->h_tone;                                  /* the hat's high-pass, two stages (~0.9 .. 5.5 kHz) */
+        const float kClick = 0.9905f;                                                  /* exp(-1 / (2.4 ms)) */
+        const float hmul = (1.0f + 1.1f * kt->h_tone) / SR;
+        const float hm_inc[6] = {205.3f * hmul, 304.4f * hmul, 369.6f * hmul, 522.7f * hmul, 540.0f * hmul, 800.0f * hmul};
+        const float hmet = kt->h_metal;
         const float rDec = fm_expf(-1.0f / (fm_maxf(0.002f, kt->r_dec) * SR));
         const float sDec = fm_expf(-1.0f / (fm_maxf(0.01f, kt->s_dec) * SR));          /* the snare's noise */
         const float sTdec = fm_expf(-1.0f / (fm_maxf(0.01f, kt->s_dec * 0.45f) * SR));   /* its body, shorter */
         const float sBurst = fm_expf(-1.0f / (0.0045f * SR));                            /* a clap's first bursts */
-        const float sHp = 0.06f + 0.55f * kt->s_snap;
-        const float sAmp = kt->s_clap > 0.5f ? 1.45f : 0.95f;                          /* a clap's bursts lose a bit: louder */
+        /* the snare's noise filter (state-variable): a snare high and open, a clap a narrower band around 1 kHz */
+        const float s_fc = kt->s_clap > 0.5f ? 850.0f + 900.0f * kt->s_snap : 1400.0f + 4600.0f * kt->s_snap;
+        const float s_k = kt->s_clap > 0.5f ? 0.45f : 1.1f;
+        const float s_g = fm_tanf(3.14159265f * s_fc / SR);
+        const float s_a1 = 1.0f / (1.0f + s_g * (s_g + s_k)), s_a2 = s_g * s_a1, s_a3 = s_g * s_a2;
+        const float sAmp = kt->s_clap > 0.5f ? 1.1f : 0.95f;                          /* a clap's bursts lose a bit: louder */
         const float dspace = kt->space;
         const int eng = p->engine;
         const float lvl = p->level * (eng == ENGINE_FM ? 0.16f : eng == ENGINE_PLUCK ? 0.30f : 0.11f);
@@ -913,14 +924,20 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 }
                 y = (sum * lvl * E.e * fade) + bass * 0.2f;
                 if (E.trem > 0.001f) y *= 1.0f - E.trem * (0.5f + 0.5f * fm_sin_turns(E.tr_ph));
-                /* kick: short, dry, no click */
+                /* kick: a sine that drops in pitch, held at full level a moment (punch, an 808's boom), driven; and the
+                 * beater's click on top */
                 if (E.k_amp > 1e-4f) {
                     float f = kt->k_base + kt->k_sweep * E.k_pitch;
-                    float ramp = E.k_ph < 0.05f ? 1.0f : 1.0f;
                     E.k_ph += f / SR;
                     if (E.k_ph >= 1.0f) E.k_ph -= 1.0f;
-                    kv = fm_tanhf(fm_sin_turns(E.k_ph) * E.k_amp * kt->k_drive) / fm_tanhf(kt->k_drive) * ramp;
-                    E.k_amp *= kDecay;
+                    kv = fm_tanhf(fm_sin_turns(E.k_ph) * E.k_amp * kt->k_drive) / fm_tanhf(kt->k_drive);
+                    if (E.k_cl > 1e-3f) {
+                        E.k_clph += 3100.0f / SR; if (E.k_clph >= 1.0f) E.k_clph -= 1.0f;
+                        kv += (fm_sin_turns(E.k_clph) * 0.55f + rnd() * 0.45f) * E.k_cl * kt->k_click * 0.5f;
+                        E.k_cl *= kClick;
+                    }
+                    if (E.k_hold > 0.0f) E.k_hold -= 1.0f;
+                    else E.k_amp *= kDecay;
                     E.k_pitch *= kPdecay;
                 }
                 E.k_tail *= tailC;
@@ -929,12 +946,22 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 /* hi-hat: high-passed noise; rim: two short tones and a click */
                 {
                     float hv = 0.0f, rv = 0.0f;
-                    if (E.h_env > 1e-4f) {
-                        float nz = rnd(), hp;
-                        E.h_lp += hpC * (nz - E.h_lp);
-                        hp = nz - E.h_lp;
-                        E.h_lp2 += 0.5f * (hp - E.h_lp2);
-                        hv = (hp - 0.3f * E.h_lp2) * E.h_env * E.h_gain * 0.3f;
+                    if (E.h_env > 1e-4f) {           /* hi-hat: metal (six square waves) and noise, high-passed twice */
+                        float x = 0.0f, hp, hp2;
+                        int j;
+                        if (hmet > 0.01f) {
+                            for (j = 0; j < 6; j++) {
+                                E.h_mph[j] += hm_inc[j]; if (E.h_mph[j] >= 1.0f) E.h_mph[j] -= 1.0f;
+                                x += E.h_mph[j] < 0.5f ? 1.0f : -1.0f;
+                            }
+                            x *= 0.5f * hmet;
+                        }
+                        x += rnd() * (1.0f - hmet);
+                        E.h_lp += hpC * (x - E.h_lp);
+                        hp = x - E.h_lp;
+                        E.h_lp2 += hpC * (hp - E.h_lp2);
+                        hp2 = hp - E.h_lp2;
+                        hv = hp2 * E.h_env * E.h_gain * 1.1f;
                         E.h_env *= E.h_dec;
                     }
                     if (E.r_env > 1e-4f) {
@@ -951,14 +978,19 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                             E.h_env = 1.0f; E.h_gain = E.h_roll_g * (0.7f + 0.2f * rndu());
                         }
                     }
-                    if (E.s_env > 1e-4f) {           /* snare: a body tone and bright noise; a clap: bursts, then a tail */
-                        float nz = rnd(), hp, sv;
-                        E.s_ph += kt->s_tone / SR; if (E.s_ph >= 1.0f) E.s_ph -= 1.0f;
-                        E.s_lp += sHp * (nz - E.s_lp);
-                        hp = nz - E.s_lp;
-                        E.s_hp += 0.6f * (hp - E.s_hp);                 /* a little softer at the very top */
-                        sv = (fm_sin_turns(E.s_ph) * E.s_tenv * kt->s_body * 1.4f + E.s_hp * (1.1f - 0.4f * kt->s_body))
-                             * E.s_env * E.s_gain * sAmp;
+                    if (E.s_env > 1e-4f) {           /* snare: a body (two tones that drop a little) and filtered noise;
+                                                        a clap: a band of noise in bursts, then a tail */
+                        float nz = rnd(), sv, body, nf, v1, v2, v3, fb = kt->s_tone * (1.0f + 0.5f * E.s_tenv) / SR;
+                        E.s_ph += fb; if (E.s_ph >= 1.0f) E.s_ph -= 1.0f;
+                        E.s_ph2 += fb * 1.62f; if (E.s_ph2 >= 1.0f) E.s_ph2 -= 1.0f;
+                        body = (fm_sin_turns(E.s_ph) * 0.65f + fm_sin_turns(E.s_ph2) * 0.35f) * E.s_tenv;
+                        v3 = nz - E.s_hp;
+                        v1 = s_a1 * E.s_lp + s_a2 * v3;
+                        v2 = E.s_hp + s_a2 * E.s_lp + s_a3 * v3;
+                        E.s_lp = 2.0f * v1 - E.s_lp;
+                        E.s_hp = 2.0f * v2 - E.s_hp;
+                        nf = kt->s_clap > 0.5f ? v1 * 1.5f : (nz - s_k * v1 - v2) * 0.55f + v1 * 0.7f;   /* band / high + band */
+                        sv = (body * kt->s_body * 1.3f + nf * (1.1f - 0.45f * kt->s_body)) * E.s_env * E.s_gain * sAmp;
                         E.s_env *= E.s_clapn ? sBurst : sDec;
                         E.s_tenv *= sTdec;
                         if (E.s_clapn) {

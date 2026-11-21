@@ -6,6 +6,8 @@ Obsimo (OSR Records). Built on [fm1-base](https://github.com/charlesvestal/fm1-b
 
 Play a song's chords with one finger and a melody over them, while a little runner runs as long as you play.
 
+**Play it in the browser:** https://swtdr34mz-afk.github.io/PLOP/emu/ (the same firmware, built for the browser).
+
 ## What it does
 
 - **Songs:** 17 song sets. A song's chords sit on the **black keys** (left to right). Each song brings its own

@@ -4,10 +4,10 @@
 #pragma once
 
 /* 16 steps: X accent, x soft, . rest; hi-hat row: o open, 2 / 3 / 4 a roll of that many hits in the step.
- * Ten current styles, each with its own kit (CHORD RUN). */
-#define NDRUM 12
+ * Thirteen current styles, each with its own kit (CHORD RUN). */
+#define NDRUM 13
 static const char *const DRUM_NAME[NDRUM] = {"HOUSE", "POP", "TRAP", "PHONK", "DRILL", "AFROBEAT", "REGGAETON", "LO-FI",
-                                             "DREAMCORE", "ANGELCORE", "HIP HOP", "80S POP"};
+                                             "DREAMCORE", "ANGELCORE", "HIP HOP", "80S POP", "POP 2"};
 static const struct { const char *k, *h, *s, *r; } DRUM_DEF[NDRUM] = {
     /* kick                hi-hat              snare / clap        perc */
     {"X...X...X...X...", "..o...o...o...o.", "....X.......X...", "...x......x...x."},   /* house: four on the floor, open hats, clap */
@@ -23,6 +23,7 @@ static const struct { const char *k, *h, *s, *r; } DRUM_DEF[NDRUM] = {
     {"X.X.......XX....", "x.x.x.x.x.x.x.x.", "....X..x.x..X..x", ".......x.......x"},   /* angelcore: a soft break, airy */
     {"X.......X.......", "x.x.x.x.x.x.x.x.", "....X.......X...", "................"},   /* hip hop: kick on 1 and 3, snare on 2 and 4 */
     {"X.......X.X.....", "xxxxxxxxxxxxxxxx", "....X.......X...", "................"},   /* 80s pop: a big snare, sixteenths */
+    {"X.....X...X.....", "x.x.x.x.x.x.x.x.", "....X.......X...", "................"},   /* pop 2: today's pop, short and tight */
 };
 
 /* each pattern's kit: kick (base Hz, sweep Hz, pitch drop s, body s, drive, hold s, click), hi-hat (tone, closed s, open s,
@@ -32,16 +33,16 @@ static const kit_t DRUM_KIT[NDRUM] = {
     {52.0f, 180.0f, 0.025f, 0.18f, 2.0f, 0.020f, 0.50f, 0.70f, 0.030f, 0.22f, 0.70f, 1700.0f, 500.0f, 0.010f, 0.30f, 900.0f, 0.00f, 0.20f, 0.45f, 1.0f, 0.18f},
     /* pop: a tight kick with a click, a snare with body */
     {55.0f, 160.0f, 0.020f, 0.12f, 1.8f, 0.015f, 0.60f, 0.60f, 0.025f, 0.12f, 0.40f, 1700.0f, 500.0f, 0.010f, 0.30f, 190.0f, 0.50f, 0.16f, 0.60f, 0.0f, 0.15f},
-    /* trap: a long 808, crisp hats (rolls), a clap */
-    {45.0f, 90.0f, 0.040f, 0.70f, 1.6f, 0.120f, 0.35f, 0.85f, 0.018f, 0.09f, 0.80f, 1700.0f, 500.0f, 0.010f, 0.30f, 900.0f, 0.00f, 0.20f, 0.55f, 1.0f, 0.12f},
+    /* trap: a long 808, crisp hats (rolls), a trap clap: short and bright (it was a long one, a snare's tail) */
+    {45.0f, 90.0f, 0.040f, 0.70f, 1.6f, 0.120f, 0.35f, 0.85f, 0.018f, 0.09f, 0.80f, 1700.0f, 500.0f, 0.010f, 0.30f, 900.0f, 0.00f, 0.07f, 0.80f, 1.0f, 0.08f},
     /* phonk: a distorted 808, the 808 cowbell, a hard clap */
     {44.0f, 120.0f, 0.030f, 0.50f, 4.0f, 0.080f, 0.50f, 0.70f, 0.020f, 0.08f, 0.60f, 540.0f, 800.0f, 0.120f, 0.00f, 200.0f, 0.30f, 0.14f, 0.70f, 1.0f, 0.10f},
     /* drill: a deep sliding-style 808, fast metal hats, a crisp snare */
     {42.0f, 70.0f, 0.050f, 0.60f, 1.8f, 0.100f, 0.30f, 0.90f, 0.015f, 0.07f, 0.90f, 1700.0f, 500.0f, 0.010f, 0.30f, 220.0f, 0.40f, 0.14f, 0.80f, 0.0f, 0.10f},
     /* afrobeat: a round kick, a shaker (noise hats), the clave, a rimshot */
     {56.0f, 120.0f, 0.020f, 0.14f, 1.4f, 0.015f, 0.40f, 0.60f, 0.030f, 0.10f, 0.20f, 2500.0f, 1250.0f, 0.030f, 0.10f, 330.0f, 0.60f, 0.07f, 0.70f, 0.0f, 0.12f},
-    /* reggaeton: a thick kick, a snappy dembow snare */
-    {54.0f, 150.0f, 0.020f, 0.16f, 2.2f, 0.020f, 0.50f, 0.60f, 0.020f, 0.08f, 0.50f, 1700.0f, 500.0f, 0.010f, 0.30f, 200.0f, 0.45f, 0.13f, 0.65f, 0.0f, 0.12f},
+    /* reggaeton: a thick kick, a short, crisp dembow snare (bright, less body) */
+    {54.0f, 150.0f, 0.020f, 0.16f, 2.2f, 0.020f, 0.50f, 0.60f, 0.020f, 0.08f, 0.50f, 1700.0f, 500.0f, 0.010f, 0.30f, 220.0f, 0.35f, 0.065f, 0.85f, 0.0f, 0.10f},
     /* lo-fi: soft and dusty, dark hats, a warm snare */
     {50.0f, 80.0f, 0.030f, 0.20f, 1.2f, 0.010f, 0.10f, 0.25f, 0.030f, 0.14f, 0.15f, 1700.0f, 500.0f, 0.010f, 0.30f, 180.0f, 0.55f, 0.18f, 0.25f, 0.0f, 0.30f},
     /* dreamcore: a deep soft kick, washed open hats, a big snare far away, a chime */
@@ -52,6 +53,8 @@ static const kit_t DRUM_KIT[NDRUM] = {
     {50.0f, 120.0f, 0.030f, 0.25f, 1.8f, 0.040f, 0.40f, 0.70f, 0.025f, 0.10f, 0.60f, 1700.0f, 500.0f, 0.010f, 0.30f, 200.0f, 0.45f, 0.16f, 0.60f, 0.0f, 0.12f},
     /* 80s pop: a tight kick, a big snare in a big room */
     {55.0f, 140.0f, 0.020f, 0.15f, 1.5f, 0.020f, 0.50f, 0.75f, 0.030f, 0.12f, 0.50f, 1700.0f, 500.0f, 0.010f, 0.30f, 200.0f, 0.50f, 0.24f, 0.55f, 0.0f, 0.50f},
+    /* pop 2: a short punchy kick with a click, tight bright hats, a short crisp snare, a dry room */
+    {56.0f, 170.0f, 0.018f, 0.11f, 2.0f, 0.012f, 0.70f, 0.80f, 0.020f, 0.10f, 0.30f, 1700.0f, 500.0f, 0.010f, 0.30f, 210.0f, 0.35f, 0.065f, 0.85f, 0.0f, 0.08f},
 };
 
 static const char *const BASS_NAME[NBASS_SOUND] = {"OFF", "SUB", "ROUND", "ACID", "REESE", "PLUCK", "FM"};

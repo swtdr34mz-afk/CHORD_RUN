@@ -114,8 +114,8 @@ static const struct {
     {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M", 3, 11, 2, 0, 7, 7, 80, 0},
     {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M", 13, 24, 1, 1, 2, 1, 96, 0},
     {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M", 23, 24, 2, 0, 1, 1, 70, 0},
-    {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M", 13, 13, 1, 0, 5, 10, 73, 0},
+    {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M", 13, 13, 1, 0, 5, 2, 73, 0},
     {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M", 16, 11, 6, 6, 5, 10, 70, 0},
     {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M", 19, 21, 3, 2, 3, 0, 120, 0},
-    {"PERFECT", "ED SHEERAN", 8, 0, "0M 9m 5M 7M", 13, 12, 2, 0, 6, 7, 95, 0},
+    {"PERFECT", "ED SHEERAN", 8, 0, "0M 9m 5M 7M", 13, 12, 2, 0, 6, 12, 95, 0},
 };

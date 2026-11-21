@@ -19,8 +19,9 @@ Play a song's chords with one finger and a melody over them, while a little runn
   grand keys and a **sampled GRAND PIANO**: the Salamander Grand Piano by Alexander Holm, CC-BY 3.0) and synths (80s
   brass, supersaw, pocket lead, an Oberheim-ish brass pad and brass lead). The melody has 18 of them (the guitar, mallet,
   kalimba, e-piano, grand keys and supersaw are for the chords only).
-- **Drums:** twelve styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
-  dreamcore, angelcore, hip hop and 80s pop (808s, metal hi-hats with rolls, claps, cowbell, washed snares).
+- **Drums:** thirteen styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
+  dreamcore, angelcore, hip hop, 80s pop and pop 2, today's tight pop (808s, metal hi-hats with rolls, claps, cowbell,
+  washed snares, short crisp ones).
 - **Loop:** press REC, play 4 bars of chords, and they play round while you play the melody on top. PLAY / STOP stops
   and restarts it.
 - **The run:** the runner runs while you play. The metres add up, the best run is kept, ten characters unlock, and

@@ -365,8 +365,8 @@ static void spread(float *n, int mode)   /* SERRE as is, OUVERT drop 2, LARGE dr
 
 /* ------------------------------------------------------------------ engine links --- */
 /* the melody voice (white keys): its preset (0 = the chords' sound), cutoff (50 = as the sound is made), level, and SPACE,
- * one knob for a few effects: up to 40 % a reverb that grows (a light tail), then echoes (the ping-pong delay, in time) join
- * in and the reverb grows on to big and airy */
+ * one knob for a few effects, sent (the melody itself stays as loud): up to 40 % a reverb that grows (a light tail), then
+ * echoes (the ping-pong delay, in time) join in and the reverb grows on to big and airy */
 static uint8_t piano_ok;                 /* the grand piano's samples are there (the resource region) */
 /* a sound as played: the sampled piano without its samples (an FM-1 updated without the region) is GRAND KEYS */
 static const sound_t *snd_at(int i)
@@ -589,6 +589,14 @@ typedef struct {
     const char *const *names;
 } kdef_t;
 static const char *msound_name[NSOUND + 1];    /* "AS CHORDS", then the sounds (app_init) */
+/* where a melody preset is in MELODY's list (-1: one for the chords only) */
+static int mel_preset_at(int v)
+{
+    int i;
+    for (i = 0; i < NMEL_PRESET; i++)
+        if (MEL_PRESET[i] == v) return i;
+    return -1;
+}
 static const kdef_t KD[NPAGE][4] = {
     {{"CUTOFF", &set.cutoff, 0, 100, KD_PCT, G_PARAMS, 0}, {"GLIDE", &set.glide, 0, 100, KD_GLIDE, G_NONE, 0},
      {"LENGTH", &set.gate, 0, 100, KD_PCT, G_GROOVE, 0}, {"DRUMS", &set.drums, 0, 100, KD_OFF, G_DRUMLVL, 0}},
@@ -646,6 +654,7 @@ static void settings_load(void)
     }
     if (set.magic != SET_MAGIC || !settings_ok())
         settings_defaults();
+    if (mel_preset_at(set.msound) < 0) set.msound = GRID_DEF[set.grid].msnd;   /* a melody preset no longer there: the song's */
 }
 
 static void game_init(void);
@@ -789,7 +798,8 @@ static void knob(int k, int32_t e)
     if (!d->v) return;                   /* (an empty place on the page) */
     prev_drums = set.drums;
     step = d->kind == KD_LIST ? e : d->kind == KD_BPM ? accel(EN_K1 + k, e) : accel(EN_K1 + k, e) * 3;
-    n = clamp((int32_t)*d->v + step, d->lo, d->hi);
+    if (d->v == &set.msound) n = MEL_PRESET[clamp(mel_preset_at(set.msound) + step, 0, NMEL_PRESET - 1)];   /* the melody's ones */
+    else n = clamp((int32_t)*d->v + step, d->lo, d->hi);
     if (n == *d->v) return;
     *d->v = (uint8_t)n;
     apply_group(d->grp);
@@ -1964,6 +1974,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "character")) *got = set.rsv[0];
     else if (!strcmp(what, "dpat")) *got = set.dpat;
     else if (!strcmp(what, "msound")) *got = set.msound;
+    else if (!strcmp(what, "mrev")) *got = set.mrev;
     else return 0;
     return 1;
 }

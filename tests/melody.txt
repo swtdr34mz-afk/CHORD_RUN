@@ -85,6 +85,20 @@ wait 50
 tap EDIT
 wait 30
 expect page 5
+# PRESET (MELODY, K4): the melody's sounds only (NIGHT SIGNAL, then 80S BRASS, POCKET LEAD: the others are the chords')
+expect msound 19
+turn K4 -1
+wait 200
+expect msound 13
+turn K4 1
+wait 200
+expect msound 19
+turn K4 1
+wait 200
+expect msound 21
+turn K4 -1
+wait 200
+expect msound 19
 tap EDIT
 wait 30
 expect page 7

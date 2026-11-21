@@ -66,6 +66,10 @@ static const sound_t SOUNDS[NSOUND] = {
      * the samples' own decay (sustain 1), the filter open, a little brighter on a hit */
     {ENGINE_SAMPLE, 3, 3, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.001f, 10.0f, 1.0f, 0.35f, 0.8f, 0.6f, 0.05f, 0.0f, 0.3f, 0.0f, 0.45f, 1.0f, 6000.0f},   /* GRAND PIANO */
 };
+/* the melody's presets (MELODY page, PRESET): the value is the sound + 1 (0 = as the chords). NYLON PLUCK, MALLET,
+ * KALIMBA, E-PIANO, GRAND KEYS and SUPERSAW are left out: they are for the chords only */
+static const uint8_t MEL_PRESET[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 21, 22, 23, 24};
+#define NMEL_PRESET ((int)(sizeof MEL_PRESET / sizeof MEL_PRESET[0]))
 #define NRHYTHM 8
 static const char *const RHYTHM_NAME[NRHYTHM] = {"HELD", "QUARTERS", "EIGHTHS", "OFFBEAT", "PUMP", "SYNCOPATED", "TRESILLO", "HALF-TIME"};
 /* 16 steps: X accent, x soft, - tie, . rest ("" = held) */
@@ -96,15 +100,15 @@ static const struct {
     {"TAKE ON ME", "A HA", 9, 0, "0M 9m 5M 7M 2m", 18, 21, 5, 3, 2, 1, 84, 0},
     {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M", 21, 23, 2, 0, 1, 11, 93, 0},
     {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 3M 5m 7s", 23, 11, 6, 6, 5, 1, 93, 0},
-    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 7m", 13, 18, 1, 0, 2, 1, 105, 0},
+    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 7m", 13, 24, 1, 0, 2, 1, 105, 0},
     {"HELLO", "ADELE", 5, 0, "0m 3M 10M 8M", 23, 12, 1, 1, 1, 1, 79, 0},
-    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M", 14, 15, 1, 6, 6, 6, 96, 0},
+    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M", 14, 11, 1, 6, 6, 6, 96, 0},
     {"BLINDING LIGHTS", "THE WEEKND", 5, 0, "0m 7m 10M 5M", 19, 19, 5, 7, 2, 1, 86, 1},
     {"SOMEONE LIKE YOU", "ADELE", 9, 0, "0M 7M 9m 5M", 23, 12, 1, 0, 2, 7, 70, 0},
     {"CREEP", "RADIOHEAD", 7, 0, "0M 4M 5M 5m", 13, 3, 2, 0, 2, 1, 92, 0},
     {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M", 3, 11, 2, 0, 7, 7, 80, 0},
-    {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M", 13, 18, 1, 1, 2, 1, 96, 0},
-    {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M", 23, 17, 2, 0, 1, 1, 70, 0},
+    {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M", 13, 24, 1, 1, 2, 1, 96, 0},
+    {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M", 23, 24, 2, 0, 1, 1, 70, 0},
     {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M", 13, 13, 1, 0, 5, 10, 73, 0},
     {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M", 16, 11, 6, 6, 5, 10, 70, 0},
     {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M", 19, 21, 3, 2, 3, 0, 120, 0},

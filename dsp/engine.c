@@ -30,6 +30,8 @@ static const uint32_t AP_LEN[4] = {142u, 107u, 379u, 277u};
 static float ks_buf[4][KS_N] PLAT_POOL;
 static float lks_buf[KS_N] PLAT_POOL;     /* the melody voice's plucked string */
 static float ch_buf[CH_N] PLAT_POOL;
+#define LR_WET0 0.6f                    /* the melody's reverb return: SPACE at its least .. at the top (0.6 + 0.6) */
+#define LR_WET1 0.6f
 #define LR_N 2560u                      /* the melody's reverb: 4 lines of 30..53 ms, modulated, no pre-delay */
 static float lr_line[4][LR_N] PLAT_POOL;
 static float lr_ap0[113] PLAT_POOL, lr_ap1[337] PLAT_POOL;
@@ -162,6 +164,7 @@ static struct {
     uint8_t ld_st;       /* 0 off, 1 attack, 2 decay / sustain, 3 release */
     sound_t lp;          /* the melody's sound, cutoff (Hz), level, reverb send */
     float lcut, llev, lrev, ldel;
+    float lr_g, lr_in, lr_wet;   /* the melody's reverb: its feedback, its input (the tail as loud, short or long), its return */
     float lglide, lvib, ld_tgt, ld_vph, ld_vamt;   /* the melody's glide (s) and vibrato, its target pitch, the LFO */
     uint32_t lr_w[4], lr_apw0, lr_apw1;
     float lr_lp[4], lr_ph[4], lr_en;
@@ -773,7 +776,16 @@ static void run_commands(void)
             break;
         }
         case CMD_LSOUND: E.lp = c->u.ls; break;
-        case CMD_LPARAM: E.lcut = c->u.lq.cut; E.llev = c->u.lq.lev; E.lrev = c->u.lq.rev; E.ldel = c->u.lq.del; break;
+        case CMD_LPARAM:
+            E.lcut = c->u.lq.cut; E.llev = c->u.lq.lev; E.lrev = c->u.lq.rev; E.ldel = c->u.lq.del;
+            /* SPACE is a send: the melody itself stays as loud, the reverb is mixed in beside it. Its input is scaled so a
+             * long tail holds no more energy than a short one (a long one built up to 8 dB over the melody, and the mix
+             * overdrove: with chords and drums, SPACE at the top added 2 dB to everything), the return at the top about
+             * as loud as the melody (the whole mix then about 0.3 dB louder) */
+            E.lr_g = 0.62f + 0.3f * E.lrev;
+            E.lr_in = fm_sqrtf(1.0f - E.lr_g * E.lr_g);
+            E.lr_wet = E.lrev > 0.001f ? LR_WET0 + LR_WET1 * E.lrev : 0.0f;
+            break;
         case CMD_LEAD:
             if (c->u.ld.m < 0.0f) { if (E.ld_st) E.ld_st = 3; }
             else {
@@ -1334,7 +1346,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 }
                 lrl = 0.0f; lrr = 0.0f;
                 if (E.lrev > 0.001f || E.lr_en > 1e-6f) {   /* the melody's reverb: none before it, smooth, the knob: a light tail .. big and airy */
-                    float g = 0.62f + 0.34f * E.lrev, x = ldo * 1.0f + 1e-15f, yv[4], sum, wet = E.lrev > 0.001f ? 0.25f + 0.75f * E.lrev : 0.0f, o, d;
+                    float g = E.lr_g, x = ldo * E.lr_in + 1e-15f, yv[4], sum, wet = E.lr_wet, o, d;
                     uint32_t k;
                     d = lr_ap0[E.lr_apw0]; o = d - 0.6f * x; lr_ap0[E.lr_apw0] = x + 0.6f * o; x = o;
                     if (++E.lr_apw0 >= 113u) E.lr_apw0 = 0u;

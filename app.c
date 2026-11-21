@@ -14,18 +14,19 @@
  *   top row: page buttons (the same button again: back to the main page)
  *                   main  cutoff, glide, note length, drums (level; 0 = no drums)
  *                   FX    delay, tremolo, chorus, reverb
- *                   SEL   chords: key, voicing, movement (the filter / level in time), arpeggiator; SEL again: CHORDS 2:
- *                         bass note (root, 3rd, 5th, pedal), width, spread (the voices across the stereo field), arp rate
+ *                   SEL   chords: key, voicing, bass note (root, 3rd, 5th, pedal), level; SEL again: CHORDS 2: width, spread
+ *                         (the voices across the stereo field)
+ *                   ARP   the arpeggiator: mode (up .. 3 octaves), rate (1/4 .. 1/32, triplets), flow (short notes .. notes
+ *                         that ring into the next), swing. With a rhythm (ALGORITHM) its steps say which arp notes play
  *                   ENV   groove: BPM, swing, density, sidechain on/off
  *                   LFO   bass: sound, level, riff, filter
  *                   EDIT  melody: cutoff, level, space (reverb, then echoes), preset; EDIT again: MELODY 2: glide, octave,
- *                         vibrato, ASSIST; EDIT a third time: the main page
+ *                         vibrato, ASSIST (off / CHORD: the white keys on the chord's notes light up on the beat / GUIDE: a
+ *                         melody made for each song lights up key by key, a hit 2 metres); EDIT a third time: the main page
  *                   GLO   drums: style (each with its own kit), kick, hats, snare
  *   bottom row      HOME  back to the main page (held: the title and the player's progress)
  *                   SAVE  the music heard from outside the room
  *                   SEQ   the next character (the unlocked ones)   PLAY  hide the info
- *                   ARP   ASSIST: off / CHORD (the white keys on the chord's notes light up, on the beat) / GUIDE (a melody
- *                         made for each song: the key to play lights up in time, the next one softly; a hit: 2 metres)
  *                   REC   the loop: ready, the first chord records 4 bars, then it plays round; REC again: close /
  *                         pause / play; held 1 s: gone
  *   OCT- / OCT+ octave.   HOME + REC held 3 s: back to the first-start settings (a countdown; the progress stays).
@@ -36,7 +37,8 @@
 #include "patterns.h"
 
 /* ------------------------------------------------------------------ settings --- */
-#define SET_MAGIC 0x4F535239u            /* "OSR9" (v9: the chords' movement, arpeggiator, bass note, stereo spread; v7, v8 taken over) */
+#define SET_MAGIC 0x4F53523Au            /* "OSR:" (v10: the ARP page, the chords' level; v7 .. v9 taken over) */
+#define SET_MAGIC_V9 0x4F535239u
 #define SET_MAGIC_V8 0x4F535238u
 #define SET_MAGIC_V7 0x4F535237u
 typedef struct {
@@ -53,7 +55,8 @@ typedef struct {
     uint8_t mglide, moct, mvib, assist;         /* melody 2: glide, octave (2 = as is), vibrato; ASSIST (the good notes light up) */
     uint8_t mcut, mlev, mrev, msound;           /* melody: cutoff, level, space (reverb, then echoes), preset (0 = as the chords) */
     uint8_t rsv[3];
-    uint8_t cmove, carp, cbass, cwidth, cspread, crate;   /* chords: movement, arpeggiator, bass note, width, spread, arp rate */
+    uint8_t aflow, carp, cbass, cwidth, cspread, crate;   /* arp flow, arp mode, bass note, width, spread, arp rate (v9) */
+    uint8_t aswing, clevel;                               /* arp swing, the chords' level (v10) */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -67,7 +70,8 @@ static void settings_defaults(void)
     set.cutoff = 50; set.glide = 17; set.gate = 50; set.drums = 0;      /* first start: no drums */
     set.delay = 0; set.trem = 0; set.chorus = 0; set.reverb = 22;   /* no FX, a light reverb */
     set.strum = 0;
-    set.cmove = 0; set.carp = 0; set.cbass = 0; set.cwidth = 50; set.cspread = 0; set.crate = 2;
+    set.aflow = 40; set.carp = 0; set.cbass = 0; set.cwidth = 50; set.cspread = 0; set.crate = ARP_R_16;
+    set.aswing = 0; set.clevel = 80;
     set.bpm = 118; set.swing = 0; set.dens = 50; set.side = 1;
     set.dpat = 0; set.dkick = 75;   /* the drums start as a plain kick */ set.dhat = 30; set.drim = 25;
     set.bsound = BASS_ROND; set.blevel = 80; set.bmotif = MOTIF_SUIT; set.bcut = 45;
@@ -475,10 +479,10 @@ static void send_fx(void)
 {
     eng_fx((float)set.reverb * 0.01f, (float)set.delay * 0.01f, (float)set.trem * 0.01f, (float)set.chorus * 0.01f);
 }
-static const uint8_t ARP_STEPS[3] = {4, 2, 1};          /* ARP RATE: 1/4, 1/8, 1/16 */
 static void send_cfx(void)
 {
-    eng_chordfx(set.carp, ARP_STEPS[set.crate < 3 ? set.crate : 2], set.cmove, (float)set.cwidth * 0.01f, set.cspread);
+    eng_chordfx(set.carp, set.crate, (float)set.aflow * 0.01f, (float)set.aswing * 0.01f, (float)set.cwidth * 0.01f,
+                set.cspread, (float)set.clevel * (1.0f / 80.0f));
 }
 static void send_groove(void)
 {
@@ -554,16 +558,18 @@ static void rechord(void)
 }
 
 /* ------------------------------------------------------------------ pages --- */
-enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, PG_MELODY2, PG_ACC2, NPAGE };
-static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS", "MELODY 2", "CHORDS 2"};
-static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO, B_EDIT, B_SEL};   /* EDIT / SEL again: page 2 */
+enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, PG_MELODY2, PG_ACC2, PG_ARP, NPAGE };
+static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS", "MELODY 2", "CHORDS 2",
+                                             "ARP"};
+static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO, B_EDIT, B_SEL, B_ARP};   /* EDIT / SEL again: page 2 */
 static const uint8_t PAGE_RGB[NPAGE][3] = {{200, 255, 60}, {120, 200, 255}, {255, 190, 90}, {255, 120, 90},
-                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}, {210, 170, 255}, {255, 190, 90}};
-static const char *const MOVE_NAME[NMOVE] = {"OFF", "SWELL", "PULSE", "WOBBLE", "PUMP"};
-static const char *const ARP_NAME[NARP] = {"OFF", "UP", "DOWN", "UP-DOWN", "RANDOM"};
+                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}, {210, 170, 255}, {255, 190, 90},
+                                          {120, 230, 255}};
+static const char *const ARP_NAME[NARP] = {"OFF", "UP", "DOWN", "UP-DOWN", "RANDOM", "UP 2 OCT", "DOWN 2 OCT", "UP-DN 2 OCT",
+                                           "UP 3 OCT"};
 static const char *const BASSNOTE_NAME[4] = {"ROOT", "3RD", "5TH", "PEDAL"};
 static const char *const SPREAD_NAME[NSPREAD] = {"DIVERGE", "ALTERNATE", "DIVERGE2", "NOTEVAL"};
-static const char *const RATE_NAME[3] = {"1/4", "1/8", "1/16"};
+static const char *const RATE_NAME[NARP_RATE] = {"1/4", "1/4 T", "1/8", "1/8 T", "1/16", "1/16 T", "1/32"};
 static const char *const MOCT_NAME[5] = {"-2", "-1", "0", "+1", "+2"};
 static const char *const ASSIST_NAME[3] = {"OFF", "CHORD", "GUIDE"};
 
@@ -582,7 +588,7 @@ static const kdef_t KD[NPAGE][4] = {
     {{"DELAY", &set.delay, 0, 100, KD_OFF, G_FX, 0}, {"TREMOLO", &set.trem, 0, 100, KD_OFF, G_FX, 0},
      {"CHORUS", &set.chorus, 0, 100, KD_OFF, G_FX, 0}, {"REVERB", &set.reverb, 0, 100, KD_PCT, G_FX, 0}},
     {{"KEY", &set.key, 0, 11, KD_LIST, G_CHORD, NOTE}, {"VOICING", &set.voicing, 0, 2, KD_LIST, G_CHORD, VOICING_NAME},
-     {"MOVEMENT", &set.cmove, 0, NMOVE - 1, KD_LIST, G_CFX, MOVE_NAME}, {"ARP", &set.carp, 0, NARP - 1, KD_LIST, G_CFX, ARP_NAME}},
+     {"BASS NOTE", &set.cbass, 0, 3, KD_LIST, G_CHORD, BASSNOTE_NAME}, {"LEVEL", &set.clevel, 0, 100, KD_PCT, G_CFX, 0}},
     {{"BPM", &set.bpm, 70, 160, KD_BPM, G_PARAMS, 0}, {"SWING", &set.swing, 0, 100, KD_OFF, G_GROOVE, 0},
      {"DENSITY", &set.dens, 0, 100, KD_BIP, G_GROOVE, 0}, {"SIDECHAIN", &set.side, 0, 1, KD_LIST, G_PARAMS, ONOFF_NAME}},
     {{"SOUND", &set.bsound, 0, NBASS_SOUND - 1, KD_LIST, G_BASS, BASS_NAME}, {"LEVEL", &set.blevel, 0, 100, KD_PCT, G_BASS, 0},
@@ -593,8 +599,10 @@ static const kdef_t KD[NPAGE][4] = {
      {"HATS", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"SNARE", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
     {{"GLIDE", &set.mglide, 0, 40, KD_GLIDE, G_MELODY, 0}, {"OCTAVE", &set.moct, 0, 4, KD_LIST, G_MELODY, MOCT_NAME},
      {"VIBRATO", &set.mvib, 0, 100, KD_OFF, G_MELODY, 0}, {"ASSIST", &set.assist, 0, 2, KD_LIST, G_NONE, ASSIST_NAME}},
-    {{"BASS NOTE", &set.cbass, 0, 3, KD_LIST, G_CHORD, BASSNOTE_NAME}, {"WIDTH", &set.cwidth, 0, 100, KD_PCT, G_CFX, 0},
-     {"SPREAD", &set.cspread, 0, NSPREAD - 1, KD_LIST, G_CFX, SPREAD_NAME}, {"ARP RATE", &set.crate, 0, 2, KD_LIST, G_CFX, RATE_NAME}},
+    {{"WIDTH", &set.cwidth, 0, 100, KD_PCT, G_CFX, 0}, {"SPREAD", &set.cspread, 0, NSPREAD - 1, KD_LIST, G_CFX, SPREAD_NAME},
+     {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0}},
+    {{"MODE", &set.carp, 0, NARP - 1, KD_LIST, G_CFX, ARP_NAME}, {"RATE", &set.crate, 0, NARP_RATE - 1, KD_LIST, G_CFX, RATE_NAME},
+     {"FLOW", &set.aflow, 0, 100, KD_PCT, G_CFX, 0}, {"SWING", &set.aswing, 0, 100, KD_OFF, G_CFX, 0}},
 };
 
 static int settings_ok(void)
@@ -605,7 +613,7 @@ static int settings_ok(void)
         return 0;
     for (p = 0; p < NPAGE; p++)
         for (k = 0; k < 4; k++)
-            if (*KD[p][k].v < KD[p][k].lo || *KD[p][k].v > KD[p][k].hi) return 0;
+            if (KD[p][k].v && (*KD[p][k].v < KD[p][k].lo || *KD[p][k].v > KD[p][k].hi)) return 0;
     return 1;
 }
 
@@ -620,12 +628,18 @@ void app_init(void)
         grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
     }
     {
-        int n = plat_store_load(OBJ_SETTINGS, &set, sizeof set), old = (int)((const uint8_t *)&set.cmove - (const uint8_t *)&set);   /* v7 / v8: up to here */
-        if (n == old && (set.magic == SET_MAGIC_V7 || set.magic == SET_MAGIC_V8)) {
+        int n = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
+        int v8 = (int)((const uint8_t *)&set.aflow - (const uint8_t *)&set), v9 = (int)((const uint8_t *)&set.aswing - (const uint8_t *)&set);
+        if ((n == v8 && (set.magic == SET_MAGIC_V7 || set.magic == SET_MAGIC_V8)) || (n == v9 && set.magic == SET_MAGIC_V9)) {
             if (set.magic == SET_MAGIC_V7) { set.mglide = 0; set.moct = 2; set.mvib = 0; set.assist = 0; }
-            set.magic = SET_MAGIC;              /* v7 / v8 -> v9: the chords' new settings at their start, no richness or strum */
-            set.cmove = 0; set.carp = 0; set.cbass = 0; set.cwidth = 50; set.cspread = 0; set.crate = 2;
-            set.rich = GRID_DEF[set.grid < NGRID ? set.grid : 0].rich; set.strum = 0;
+            if (set.magic != SET_MAGIC_V9) {    /* v7 / v8: no richness or strum, the chords' extras at their start */
+                set.carp = 0; set.cbass = 0; set.cwidth = 50; set.cspread = 0;
+                set.rich = GRID_DEF[set.grid < NGRID ? set.grid : 0].rich; set.strum = 0;
+            }
+            set.crate = set.magic == SET_MAGIC_V9 && set.crate < 3 ? (uint8_t)(set.crate * 2u) : ARP_R_16;   /* was 1/4 1/8 1/16 */
+            set.aflow = 40; set.aswing = 0; set.clevel = 80;   /* (v9's movement was where the flow is now) */
+            if (set.carp >= NARP) set.carp = 0;
+            set.magic = SET_MAGIC;
             if (set.dpat >= NDRUM) set.dpat = 0;
             if (set.page >= NPAGE) set.page = 0;
         }
@@ -755,9 +769,11 @@ static void apply_group(int g)
 static void knob(int k, int32_t e)
 {
     const kdef_t *d = &KD[set.page][k];
+    int32_t step, n;
+    if (!d->v) return;                   /* (an empty place on the page) */
     prev_drums = set.drums;
-    int32_t step = d->kind == KD_LIST ? e : d->kind == KD_BPM ? accel(EN_K1 + k, e) : accel(EN_K1 + k, e) * 3;
-    int32_t n = clamp((int32_t)*d->v + step, d->lo, d->hi);
+    step = d->kind == KD_LIST ? e : d->kind == KD_BPM ? accel(EN_K1 + k, e) : accel(EN_K1 + k, e) * 3;
+    n = clamp((int32_t)*d->v + step, d->lo, d->hi);
     if (n == *d->v) return;
     *d->v = (uint8_t)n;
     apply_group(d->grp);
@@ -1120,10 +1136,6 @@ static void button(int k)
         hop_at = plat_ms();
         break;
     }
-    case B_ARP:                                  /* ASSIST: the white keys that fit the chord light up, on the beat */
-        set.assist = (uint8_t)((set.assist + 1u) % 3u);
-        app_say("ASSIST", set.assist == 2 ? "GUIDE - PLAY THE LIT KEY" : set.assist ? "THE CHORD'S NOTES LIGHT UP" : "OFF");
-        break;
     case B_PLAY: fun(k); return;
     case B_OCTDN:
     case B_OCTUP:
@@ -1363,7 +1375,6 @@ static void input(void)
     if (lp.st == LP_PLAY || ((lp.st == LP_REC || lp.st == LP_READY) && (now / (lp.st == LP_REC ? 200u : 500u)) % 2u))
         lit_btn |= 1u << B_REC;
     if (ui.clean) lit_btn |= LED_PLAY_GREEN;
-    if (set.assist) lit_btn |= 1u << B_ARP;
     /* ASSIST: while a chord plays, the white keys on its notes light up, fully on each beat's first half, softer after */
     if (set.assist == 2) {                      /* GUIDE: the key to play, the next one softly */
         if (gd.key >= 0) lit_keys |= 1u << (uint32_t)gd.key;
@@ -1440,14 +1451,17 @@ static void draw_bottom_text(void)       /* in the second canvas: y 0 = screen r
     cv_rect(6, y0 + 1, tw, 13, pc);
     cv_text(11, y0 + 1, &FONT_T, PAGE_NAME[set.page], RGB(0, 0, 0));
     t[0] = 0;
-    text_cat(t, set.rhythm ? RHYTHM_NAME[set.rhythm] : "RHYTHM OFF");
+    if (set.carp) { text_cat(t, "ARP "); text_cat(t, set.rhythm ? RHYTHM_NAME[set.rhythm] : "ALL NOTES"); }
+    else text_cat(t, set.rhythm ? RHYTHM_NAME[set.rhythm] : "RHYTHM OFF");
     if (set.drums) text_cat(t, " + DRUMS");
     cv_text(232 - text_w(&FONT_T, t), y0 + 1, &FONT_T, t, RGB(170, 166, 180));
     for (k = 0; k < 4; k++) {
         char v[24];
         const kdef_t *d = &KD[set.page][k];
         int32_t x = 6 + k * 58;
-        float f = knob_text(d, v);
+        float f;
+        if (!d->v) continue;                 /* (an empty place) */
+        f = knob_text(d, v);
         const felucca_font_t *vf = text_w(&FONT_S, v) <= 56 ? &FONT_S : &FONT_T;
         cv_text(x, y0 + 15, &FONT_T, d->lab, RGB(190, 186, 200));
         cv_text(x, y0 + 28 + (vf == &FONT_T ? 2 : 0), vf, v, RGB(250, 248, 252));
@@ -1711,15 +1725,17 @@ static void draw_screen(int bottom)
     neon_sky(HY, now);
     if (active && cur_idx >= 0) { int o; cs = key_slot(cur_idx, &cvar, &o); }
     if (bottom) {
-        const char *r = set.carp ? ARP_NAME[set.carp] : set.cmove ? MOVE_NAME[set.cmove] : "";
         int32_t x;
         neon_sun(198, HY - 4, 34, HY, now);
         neon_runner(HY - 2, 146, (int)run.scroll, 1, now);
         if (now - run.party_at < 1600u && run.party_at) party(146, HY - 12, now - run.party_at);
         if (active) cv_text(8, 2, text_w(&FONT_L, chord_txt) <= 100 ? &FONT_L : &FONT_B, chord_txt, W);
         x = cv_text(8, 36, &FONT_XS, SOUND_NAME[set.sound], L);
-        if (set.carp) { x = cv_text(x + 8, 36, &FONT_XS, "ARP", L); cv_text(x + 4, 36, &FONT_XS, r, ACC1); }
-        else if (r[0]) cv_text(x + 8, 36, &FONT_XS, r, ACC1);
+        if (set.carp) {
+            x = cv_text(x + 8, 36, &FONT_XS, "ARP", L);
+            x = cv_text(x + 4, 36, &FONT_XS, ARP_NAME[set.carp], ACC1);
+            cv_text(x + 5, 36, &FONT_XS, RATE_NAME[set.crate], L);
+        }
         {   /* the metres: this run's (lime) while it runs, else all of them; under them the mission and how far it is */
             char m[32], pr[12];
             int32_t w;
@@ -1869,7 +1885,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "assist")) *got = set.assist;
     else if (!strcmp(what, "carp")) *got = set.carp;
     else if (!strcmp(what, "cbass")) *got = set.cbass;
-    else if (!strcmp(what, "cmove")) *got = set.cmove;
+    else if (!strcmp(what, "crate")) *got = set.crate;
     else if (!strcmp(what, "assist_keys")) *got = (int)as_keys;
     else if (!strcmp(what, "guide_key")) *got = gd.key;
     else if (!strcmp(what, "guide_next")) *got = gd.next_key;

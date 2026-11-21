@@ -62,7 +62,7 @@ typedef struct {
         sound_t ls;
         struct { float cut, lev, rev, del; } lq;
         struct { float glide, vib; } lm;
-        struct { uint8_t arp, steps, move, spread; float width; } cf;
+        struct { uint8_t arp, rate, spread; float flow, swing, width, level; } cf;
     } u;
 } cmd_t;
 #define QN 16u
@@ -124,10 +124,11 @@ static struct {
     float fenv, ienv, ie_s;               /* ie_s: the FM index envelope, smoothed (a hit must not jump it: a click) */
     /* filter (left and right: the voices are spread across the stereo field) */
     float ic1, ic2, g, ic1r, ic2r;
-    /* the chords' extras: arpeggiator, movement, stereo spread */
-    uint8_t arp, arp_steps, move, spread, vmask, arp_v, rr;
+    /* the chords' extras: arpeggiator, level, stereo spread */
+    uint8_t arp, arate, spread, vmask, arp_v, rr, arp_n;
+    int arp_last;
     uint32_t arp_k;
-    float vg[4], width, mv_free, pg;
+    float vg[4], width, aflow, aswing, clev, arp_left, arp_per, arp_fk, cn[4], rh_cov[16];
     /* transition fade */
     float fade_len, fade_left;
     uint8_t pending, retrig;
@@ -216,11 +217,11 @@ void eng_lead_params(float cut_hz, float level, float reverb, float delay)
     push(&c);
 }
 void eng_lead(float m) { cmd_t c; c.t = CMD_LEAD; c.u.ld.m = m; push(&c); }
-void eng_chordfx(int arp, int arp_steps, int move, float width, int spread)
+void eng_chordfx(int arp, int rate, float flow, float swing, float width, int spread, float level)
 {
     cmd_t c;
-    c.t = CMD_CFX; c.u.cf.arp = (uint8_t)arp; c.u.cf.steps = (uint8_t)(arp_steps < 1 ? 1 : arp_steps);
-    c.u.cf.move = (uint8_t)move; c.u.cf.spread = (uint8_t)spread; c.u.cf.width = width;
+    c.t = CMD_CFX; c.u.cf.arp = (uint8_t)arp; c.u.cf.rate = (uint8_t)rate; c.u.cf.spread = (uint8_t)spread;
+    c.u.cf.flow = flow; c.u.cf.swing = swing; c.u.cf.width = width; c.u.cf.level = level;
     push(&c);
 }
 void eng_lead_mod(float glide_s, float vibrato) { cmd_t c; c.t = CMD_LMOD; c.u.lm.glide = glide_s; c.u.lm.vib = vibrato; push(&c); }
@@ -307,6 +308,7 @@ static void set_notes(const float *notes, float bass, float glide_chunks)
     int i;
     for (i = 0; i < 4; i++) {
         voice_t *v = &E.v[i];
+        E.cn[i] = notes[i];                     /* (the chord's notes, for the arpeggiator) */
         v->target = notes[i];
         if (glide_chunks < 1.0f) { v->m = notes[i]; v->inc = 0.0f; }
         else v->inc = (notes[i] - v->m) / glide_chunks;
@@ -471,25 +473,44 @@ static void bass_hit(float gate_s, int oct)
     midi_bass_on();
 }
 
-/* the arpeggiator's next note: one voice (the chord's notes low to high), a hit of its own */
-static void arp_hit(float len)
+/* the arpeggiator's next note (its clock: the render), period its length in samples: the chord's notes low to high over 1 to 3
+ * octaves; the voices take turns, so the last notes ring on as they fade (FLOW: from a click to into the next notes) */
+static const float RATE_BEATS[NARP_RATE] = {1.0f, 2.0f / 3.0f, 0.5f, 1.0f / 3.0f, 0.25f, 1.0f / 6.0f, 0.125f};
+static void arp_fire(float period)
 {
-    static const uint8_t UD[6] = {0, 1, 2, 3, 2, 1};
-    int v, i;
-    uint32_t k = E.arp_k++;
-    switch (E.arp) {
-    case ARP_DOWN: v = 3 - (int)(k & 3u); break;
-    case ARP_UPDOWN: v = UD[k % 6u]; break;
-    case ARP_RANDOM: { int w = (int)(rndu() * 3.999f); v = w >= E.arp_v ? w + 1 : w; if (v > 3) v = 0; break; }
-    default: v = (int)(k & 3u); break;
+    int oct = E.arp == ARP_UP3 ? 3 : E.arp >= ARP_UP2 ? 2 : 1, total = 4 * oct, idx, v, i;
+    float vel = 1.0f, pitch, tau;
+    uint32_t k;
+    if (!E.rh.hold) {                           /* a rhythm: its steps say which notes play (the step this note falls in) */
+        int st = E.step_left < 2.0f ? E.step & 15 : (E.last_step >= 0 ? E.last_step & 15 : 0);
+        vel = E.rh_cov[st];
+        if (vel <= 0.0f) return;
     }
+    k = E.arp_k++;
+    switch (E.arp) {
+    case ARP_DOWN: case ARP_DOWN2: idx = total - 1 - (int)(k % (uint32_t)total); break;
+    case ARP_UPDOWN: case ARP_UPDOWN2: {
+        uint32_t per = (uint32_t)(2 * total - 2), q = k % per;
+        idx = q < (uint32_t)total ? (int)q : (int)(per - q);
+        break;
+    }
+    case ARP_RANDOM: idx = (int)(rndu() * 3.999f); if (idx == E.arp_last) idx = (idx + 1) & 3; break;
+    default: idx = (int)(k % (uint32_t)total); break;
+    }
+    pitch = E.cn[idx & 3] + 12.0f * (float)(idx >> 2);
+    v = (int)(k & 3u);
     for (i = 0; i < 4; i++)                     /* MIDI: the other notes off */
         if (i != v && E.mv[i] != MIDI_NONE) { midi_off(E.mv[i]); E.mv[i] = MIDI_NONE; }
-    E.arp_v = (uint8_t)v;
+    E.v[v].m = E.v[v].target = pitch; E.v[v].inc = 0.0f;
+    E.arp_v = (uint8_t)v; E.arp_last = idx;
     if (E.spread == SPREAD_DIVERGE2) E.rr = (uint8_t)((E.rr + 1u) & 3u);
     E.vmask = (uint8_t)(1u << v);
-    hit((k & 3u) == 0u ? 0.95f : 0.78f, len * 0.8f, 0.0f);
+    hit(vel * ((k & 3u) == 0u ? 1.0f : 0.86f), period * (E.aflow < 0.6f ? 0.2f + 0.8f * E.aflow / 0.6f : 1.05f),
+        fm_maxf(0.002f, fm_minf(E.p.atk, 0.006f + 0.1f * E.aflow)));   /* short notes: a quick attack, even a pad's */
     E.vmask = 0x0Fu;
+    E.rel_s = E.p.rel * SR * (0.35f + 1.3f * E.aflow);         /* a longer flow: plucks ring longer */
+    tau = 0.0012f * SR + E.aflow * E.aflow * 1.6f * period;     /* how long the last notes take to fade */
+    E.arp_fk = 1.0f / fm_maxf(1.0f, tau);
 }
 
 static void on_step(void)
@@ -525,8 +546,11 @@ static void on_step(void)
         }
         if (E.dr.r[i] > 0.0f) { E.r_env = 1.0f; E.r_gain = E.dr.r[i] * E.dr_l; E.r_ph1 = E.r_ph2 = 0.0f; }
     }
-    if (E.active && E.arp) {                         /* the arpeggiator in place of the rhythm's hits */
-        if (i % E.arp_steps == 0) arp_hit(sl * (float)E.arp_steps);
+    if (E.active && E.arp) {                         /* the arpeggiator in place of the rhythm's hits: lined up at each bar */
+        if (i == 0) {
+            if (E.arp_per > 0.0f && E.arp_left > E.arp_per - 8.0f) E.arp_n = 1;   /* it just played the bar's first note */
+            else { E.arp_left = 0.0f; E.arp_n = 0; }
+        }
     } else if (E.active && !E.rh.hold) {
         float v = E.rh.v[i];
         int nlen = E.rh.len[i];
@@ -561,12 +585,19 @@ static void chord_cmd(const float *notes, float bass, float glide)
 {
     float gc = glide * SR / (float)CHUNK;
     if (E.spread == SPREAD_DIVERGE2 && !E.arp) E.rr = (uint8_t)((E.rr + 1u) & 3u);   /* round robin: each chord moves on */
+    if (E.active && E.arp) {                    /* the arpeggiator: the new chord's notes for its next notes, the bass moves on */
+        int i;
+        for (i = 0; i < 4; i++) E.cn[i] = notes[i];
+        E.btarget = bass;
+        if (gc < 1.0f) { E.bm = bass; E.binc = 0.0f; } else E.binc = (bass - E.bm) / gc;
+        return;
+    }
     if (!E.active) {
         E.active = 1;
         set_notes(notes, bass, 0.0f);
         E.fade_left = 0.0f;
         E.pending = 0;
-        E.arp_k = 0;
+        E.arp_k = 0; E.arp_per = 0.0f; E.arp_left = 0.0f;
         if (E.rh.hold && !E.arp) hit(1.0f, 1e9f, 0.0f);
         if (E.bmotif == MOTIF_TENUE) bass_hit(1e9f, 0);
         check_run();
@@ -592,6 +623,14 @@ static void run_commands(void)
         case CMD_SOUND: E.p = c->u.s; break;
         case CMD_RHYTHM:
             E.rh = c->u.r;
+            {   /* the steps the rhythm covers (a note or its tie) and how strong: the arpeggiator's pattern */
+                int i2, j;
+                for (i2 = 0; i2 < 16; i2++) E.rh_cov[i2] = 0.0f;
+                for (i2 = 0; i2 < 16; i2++)
+                    if (E.rh.v[i2] > 0.0f)
+                        for (j = 0; j < (E.rh.len[i2] ? E.rh.len[i2] : 1) && i2 + j < 16; j++)
+                            E.rh_cov[i2 + j] = E.rh.v[i2] * (j ? 0.85f : 1.0f);
+            }
             if (E.active && !E.arp) {
                 if (E.rh.hold) hit(1.0f, 1e9f, 0.0f);
                 else E.gate_left = 0.0f;
@@ -645,9 +684,9 @@ static void run_commands(void)
         case CMD_LMOD: E.lglide = c->u.lm.glide; E.lvib = c->u.lm.vib; break;
         case CMD_CFX: {
             uint8_t was = E.arp;
-            E.arp = c->u.cf.arp < NARP ? c->u.cf.arp : 0; E.arp_steps = c->u.cf.steps;
-            E.move = c->u.cf.move < NMOVE ? c->u.cf.move : 0; E.spread = c->u.cf.spread < NSPREAD ? c->u.cf.spread : 0;
-            E.width = c->u.cf.width;
+            E.arp = c->u.cf.arp < NARP ? c->u.cf.arp : 0; E.arate = c->u.cf.rate < NARP_RATE ? c->u.cf.rate : ARP_R_16;
+            E.spread = c->u.cf.spread < NSPREAD ? c->u.cf.spread : 0;
+            E.aflow = c->u.cf.flow; E.aswing = c->u.cf.swing; E.width = c->u.cf.width; E.clev = c->u.cf.level;
             if (E.active && was != E.arp) {         /* the arpeggiator on / off while a chord plays */
                 if (!E.arp && E.rh.hold) hit(1.0f, 1e9f, 0.0f);
                 check_run();
@@ -708,7 +747,7 @@ void eng_init(void)
     E.dr.kit.r_f1 = 1720.0f; E.dr.kit.r_f2 = 480.0f; E.dr.kit.r_dec = 0.008f; E.dr.kit.r_noise = 0.25f;
     E.bsound = BASS_ROND; E.blevel = 0.6f; E.bcut = 600.0f;
     for (i = 0; i < 4; i++) { E.sg[i] = 1.0f; E.vg[i] = 1.0f; }
-    E.vmask = 0x0Fu; E.arp_steps = 1; E.width = 0.5f; E.pg = 1.0f;
+    E.vmask = 0x0Fu; E.arate = ARP_R_16; E.width = 0.5f; E.clev = 1.0f; E.aflow = 0.4f; E.arp_fk = 0.02f;
     E.dl_time = 0.75f * 60.0f / 118.0f * SR;
     E.p.engine = ENGINE_SUB; E.p.sus = 1.0f; E.p.atk = 0.01f; E.p.rel = 0.5f; E.p.dec = 0.3f; E.p.level = 1.0f;
     E.p.bass = 0.45f; E.p.mix2 = 0.5f; E.p.ratio = 1.0f; E.p.idx = 1.0f; E.p.idec = 0.4f; E.p.bright = 0.6f;
@@ -765,7 +804,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float sAmp = kt->s_clap > 0.5f ? 1.1f : 0.95f;                          /* a clap's bursts lose a bit: louder */
         const float dspace = kt->space;
         const int eng = p->engine;
-        const float lvl = p->level * (eng == ENGINE_FM ? 0.16f : eng == ENGINE_PLUCK ? 0.30f : 0.11f);
+        const float lvl = p->level * (eng == ENGINE_FM ? 0.16f : eng == ENGINE_PLUCK ? 0.30f : 0.11f) * E.clev;
         const float kdamp = 1.0f / fm_maxf(0.3f, E.q);
         const float ang = E.rev * 1.5707963f;
         const float dry = fm_maxf(0.18f, fm_cosf(ang)), rsend = fm_sinf(ang) * 1.1f;
@@ -865,31 +904,6 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 fc = fm_minf(SR * 0.45f, base * fm_exp2f(p->fenv * E.fenv * E.vel));
             }
             if (eng == ENGINE_PLUCK) fc = fm_minf(fc, 2400.0f);   /* plucked strings: their own ceiling, never harsh */
-            {   /* movement: the filter (or the level) moving in time, on the rhythm's own steps when it runs; it only
-                 * closes the filter from where it is, never opens it further */
-                float phb, ph1, pgt = 1.0f;
-                E.mv_free += (float)cn / SR * E.bpm * (1.0f / 60.0f);          /* beats, when no rhythm runs */
-                if (E.mv_free >= 64.0f) E.mv_free -= 64.0f;
-                if (E.running && E.last_step >= 0) {
-                    int cs = E.last_step;
-                    float ln = step_len(cs), f = ln > 0.0f ? 1.0f - E.step_left / ln : 0.0f;
-                    f = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
-                    phb = ((float)(cs & 3) + f) * 0.25f;
-                    ph1 = ((float)cs + f) * (1.0f / 16.0f);
-                } else {
-                    phb = E.mv_free - fm_floorf(E.mv_free);
-                    ph1 = E.mv_free * 0.25f - fm_floorf(E.mv_free * 0.25f);
-                }
-                switch (E.move) {
-                case MOVE_SWELL: fc *= fm_exp2f(3.0f * (ph1 - 1.0f)); break;                         /* opens over the bar */
-                case MOVE_PULSE: { float q = 1.0f - phb; fc *= fm_exp2f(2.5f * (q * q - 1.0f)); break; }   /* each beat */
-                case MOVE_WOBBLE: fc *= fm_exp2f(2.5f * (0.5f + 0.5f * fm_sin_turns(phb * 2.0f + 0.25f) - 1.0f)); break;
-                case MOVE_PUMP: { float q = 1.0f - phb; pgt = 1.0f - 0.85f * q * q * q; break; }      /* the level ducks */
-                default: break;
-                }
-                E.pg += (pgt - E.pg) * 0.5f;
-                fc = fm_maxf(fc, 40.0f);
-            }
             E.g += (fm_tanf(3.14159265f * fc / SR) - E.g) * 0.45f;   /* smoothed: a hit's filter jump must not click */
             {   /* the voices across the stereo field (as a Prophet's voice spread), WIDTH how far; equal power */
                 static const float DIV[4] = {-0.25f, 0.25f, -0.75f, 0.75f}, ALT[4] = {-1.0f, 1.0f, -1.0f, 1.0f},
@@ -925,6 +939,17 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     }
                     E.step_left -= 1.0f;
                 }
+                if (E.arp && E.active && E.running) {   /* the arpeggiator's own clock (triplets too), swung in pairs */
+                    E.arp_left -= 1.0f;
+                    if (E.arp_left <= 0.0f) {
+                        float per = 60.0f / E.bpm * SR * RATE_BEATS[E.arate], sw = E.aswing * 0.33f;
+                        per *= (E.arp_n & 1u) ? 1.0f - sw : 1.0f + sw;
+                        E.arp_n++;
+                        arp_fire(per);
+                        E.arp_left += per;
+                        E.arp_per = per;
+                    }
+                }
                 /* amp envelope */
                 switch (E.stage) {
                 case 1: E.e += E.vel / E.atk_s; if (E.e >= E.vel) { E.e = E.vel; E.stage = 2; } break;
@@ -954,11 +979,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         E.pending = 0;
                         set_notes(E.pend_notes, E.pend_bass, 0.0f);
                         E.e = 0.0f;
-                        if (E.retrig) {
-                            if (E.arp) E.vmask = (uint8_t)(1u << E.arp_v);   /* the arpeggio's note, on the new chord */
-                            hit(E.vel, fm_maxf(E.gate_left, SR * 0.04f), 0.0f);
-                            E.vmask = 0x0Fu;
-                        }
+                        if (E.retrig) hit(E.vel, fm_maxf(E.gate_left, SR * 0.04f), 0.0f);
                         else { E.stage = 0; midi_chord_off(); }
                         fade = 0.0f;
                         for (i = 0; i < 4; i++) {   /* the new notes' increments right away */
@@ -1010,9 +1031,9 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         else E.sg[i] = fm_maxf(0.0f, E.sg[i] - 0.01f);
                         vo *= E.sg[i];
                     }
-                    if (E.arp || E.vg[i] < 1.0f) {   /* the arpeggiator: its one voice, the others fade out (~1 ms) */
+                    if (E.arp || E.vg[i] < 1.0f) {   /* the arpeggiator: its voice in (~1 ms), the last ones fade (FLOW) */
                         float t = (!E.arp || (int)i == E.arp_v) ? 1.0f : 0.0f;
-                        E.vg[i] += (t - E.vg[i]) * 0.02f;
+                        E.vg[i] += (t - E.vg[i]) * (t > E.vg[i] ? 0.02f : E.arp_fk);
                         if (!E.arp && E.vg[i] > 0.999f) E.vg[i] = 1.0f;
                         vo *= E.vg[i];
                     }
@@ -1072,8 +1093,8 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     }
                     bass = o * amp * E.blevel * 0.75f;
                 }
-                y = (sum * lvl * E.e * fade * E.pg) + bass * 0.2f;
-                yr = (sumr * lvl * E.e * fade * E.pg) + bass * 0.2f;
+                y = (sum * lvl * E.e * fade) + bass * 0.2f;
+                yr = (sumr * lvl * E.e * fade) + bass * 0.2f;
                 if (E.trem > 0.001f) { float tg = 1.0f - E.trem * (0.5f + 0.5f * fm_sin_turns(E.tr_ph)); y *= tg; yr *= tg; }
                 /* kick: a sine that drops in pitch, held at full level a moment (punch, an 808's boom), driven; and the
                  * beater's click on top */

@@ -207,22 +207,34 @@ turn ALGO -2
 wait 300
 expect rhythm 0
 shot sleep.png
-# sounds: a plucked guitar with the arpeggiator (CHORDS: ARP UP; SEL again: CHORDS 2, SEL again: main), an FM e-piano
+# sounds: a plucked guitar with the arpeggiator (the ARP page: MODE UP, RATE 1/8 T), an FM e-piano
 turn PRESET -4
 wait 30
 expect sound 13
-tap SEL
-turn K4 1
+tap ARP
+wait 30
+expect page 9
+turn K1 1
+turn K2 -1
 wait 30
 expect carp 1
+expect crate 3
+shot arp.png
+tap ARP
+wait 30
+expect page 0
+# CHORDS: key, voicing, bass note, level; SEL again: CHORDS 2 (width, spread); again: main
+tap SEL
+wait 30
+turn K3 1
+wait 30
+expect cbass 1
+shot chords.png
+turn K3 -1
 tap SEL
 wait 30
 expect page 8
-turn K1 1
-wait 30
-expect cbass 1
 shot chords2.png
-turn K1 -1
 tap SEL
 wait 30
 expect page 0

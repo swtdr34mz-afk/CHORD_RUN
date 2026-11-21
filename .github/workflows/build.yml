@@ -1,7 +1,9 @@
 # Builds the firmware (.fwsc, installable on an FM-1) on GitHub's machines, which can reach JieLi's toolchain server.
 # Also runs the host simulator's tests (a failing test does not stop the build).
 # Result: Actions tab > the run > "Artifacts" > chordrun-firmware.
-# This copy does not publish releases or a website: only the downloadable artifact.
+# On a tag (v1.0, v1.1 ...) the release gets the .fwsc. Every push to main also puts CHORD RUN in the browser
+# (fm1-base's emulator: the same app compiled to WebAssembly) on GitHub Pages: https://swtdr34mz-afk.github.io/PLOP/emu/
+# (the Firmware Hub card's play key, fmhub.json "play"; Settings > Pages > Source: GitHub Actions).
 name: Build firmware
 on:
   push:
@@ -88,3 +90,57 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/*.fwsc
+
+  emulator:
+    # CHORD RUN in the browser: tools/build.py --web (Emscripten), the page and app.wasm in build/emu
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Tools
+        run: pip install -q Pillow fonttools
+
+      - name: Emscripten (emsdk 6.0.10 at a fixed commit, as fm1-base's template)
+        run: |
+          git clone -q https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          git -C "$RUNNER_TEMP/emsdk" checkout -q a2b92777574c2feda07994cd4f1079a3dfc151f8
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
+
+      - name: The emulator
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          emcc --version | head -1
+          REL=""; if [ "${GITHUB_REF_TYPE}" = "tag" ]; then REL="--release ${GITHUB_REF_NAME#v}"; fi
+          python3 fm1-base/tools/build.py . --web $REL
+          mkdir -p _site
+          cp -r build/emu _site/emu
+          cp -r web/words _site/words          # the screen reader's words (the page reads ../words/)
+          printf '%s\n' '<!doctype html><meta charset="utf-8"><title>CHORD RUN</title>' \
+            '<meta http-equiv="refresh" content="0; url=emu/"><a href="emu/">CHORD RUN in the browser</a>' > _site/index.html
+          ls -la _site _site/emu
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  pages:
+    # the emulator on GitHub Pages (from main only: the Pages environment takes the default branch)
+    needs: emulator
+    if: github.ref == 'refs/heads/main'
+    continue-on-error: true      # until Pages is switched on (Settings > Pages > Source: GitHub Actions) it cannot deploy
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}emu/
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

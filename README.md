@@ -6,7 +6,7 @@ Obsimo (OSR Records). Built on [fm1-base](https://github.com/charlesvestal/fm1-b
 
 Play a song's chords with one finger and a melody over them, while a little runner runs as long as you play.
 
-**Play it in the browser:** https://swtdr34mz-afk.github.io/PLOP/emu/ (the same firmware, built for the browser).
+**Play it in the browser:** https://swtdr34mz-afk.github.io/CHORD_RUN/emu/ (the same firmware, built for the browser).
 
 ## What it does
 
@@ -62,7 +62,7 @@ Push to GitHub: the workflow builds the firmware (`.fwsc`) on every push (Action
 
 Locally (Linux x86-64), the simulator and its tests:
 
-    git clone --recursive <this repository> && cd plop
+    git clone --recursive https://github.com/swtdr34mz-afk/CHORD_RUN && cd CHORD_RUN
     python3 fm1-base/tools/build.py . --host
     build/host/chordrun_host tests/basic.txt build/host     # the basics: screenshots, sounds
     build/host/chordrun_host tests/run.txt build/host       # the run, missions, the loop, the progress kept

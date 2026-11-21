@@ -2,7 +2,7 @@
 # Also runs the host simulator's tests (a failing test does not stop the build).
 # Result: Actions tab > the run > "Artifacts" > chordrun-firmware.
 # On a tag (v1.0, v1.1 ...) the release gets the .fwsc. Every push to main also puts CHORD RUN in the browser
-# (fm1-base's emulator: the same app compiled to WebAssembly) on GitHub Pages: https://swtdr34mz-afk.github.io/PLOP/emu/
+# (fm1-base's emulator: the same app compiled to WebAssembly) on GitHub Pages: https://swtdr34mz-afk.github.io/CHORD_RUN/emu/
 # (the Firmware Hub card's play key, fmhub.json "play"; Settings > Pages > Source: GitHub Actions).
 name: Build firmware
 on:

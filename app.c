@@ -906,6 +906,8 @@ static void lp_note(int key)
     }
     if (lp.st == LP_REC && lp.n < LP_MAX) {
         int32_t st = (int32_t)((float)(now - lp.t0) / step_ms() + 0.5f);
+        if (key < 0 && lp.n && lp.ev[lp.n - 1].key >= 0 && st <= (int32_t)lp.ev[lp.n - 1].step)
+            st = lp.ev[lp.n - 1].step + 1;      /* a short tap: it still sounds a step */
         if (st < (int32_t)lp.len) { lp.ev[lp.n].step = (uint16_t)st; lp.ev[lp.n].key = (int8_t)key; lp.n++; }
     }
 }

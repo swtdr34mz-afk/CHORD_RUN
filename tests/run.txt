@@ -439,6 +439,35 @@ release REC
 wait 60
 expect loop 0
 expect loopn 0
+# a loop without a rhythm (HELD): short taps still sound, the stops are kept
+turn ALGO -2
+wait 30
+expect rhythm 0
+tap REC
+wait 50
+key 1 down
+wait 40
+key 1 up
+wait 30
+expect loop 2
+wait 2800
+key 3 down
+wait 1000
+key 3 up
+wait 9000
+expect loop 3
+expect loopn 4
+expect active 0
+wait 1700
+expect active 1
+expect chord 3
+wait 1200
+expect active 0
+press REC
+wait 1200
+release REC
+wait 60
+expect loop 0
 # the progress is kept (after 4 s of quiet) and comes back after a restart
 expect active 0
 wait 6000
@@ -447,7 +476,7 @@ reboot
 wait 600
 expect missions 7
 expect unlocked 5
-expect metres_h 14
+expect metres_h 15
 expect mission 7
 # HOME held: the progress
 press HOME

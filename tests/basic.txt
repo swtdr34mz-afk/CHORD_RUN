@@ -20,9 +20,9 @@ key 1 up
 wait 30
 expect active 0
 # a set (its own sound: BABY ONE MORE TIME, GRAND KEYS, 93 BPM), a rhythm: the chord keeps playing (latch); the drums from the main page's K4 (kick only at first)
-turn SELECT 4
+turn SELECT 3
 wait 30
-expect grid 4
+expect grid 3
 expect sound 17
 expect bpm 93
 expect msound 11
@@ -242,7 +242,7 @@ wait 4500
 expect dirty 0
 reboot
 wait 600
-expect grid 4
+expect grid 3
 expect sound 16
 expect page 0
 # HOME + REC held 3 s: the first settings back (let go before: nothing)

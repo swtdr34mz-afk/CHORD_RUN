@@ -8,13 +8,14 @@ Play a song's chords with one finger and a melody over them, while a little runn
 
 ## What it does
 
-- **Songs:** 19 song sets. A song's chords sit on the **black keys** (left to right). Each song brings its own
+- **Songs:** 17 song sets. A song's chords sit on the **black keys** (left to right). Each song brings its own
   sounds, tempo, bass and drum style.
-- **Melody:** the **white keys** play a melody in the scale of the chord that played last, so it always fits.
-- **Sounds:** 21 sounds in five families: ambient pads, soft keys, plucks (guitar, mallet, kalimba), keys (e-piano,
-  grand keys) and synths (80s brass, supersaw, pocket lead).
-- **Drums:** ten current styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
-  dreamcore and angelcore (hi-hat rolls, claps, cowbell, washed snares).
+- **Melody:** the **white keys** play the song's scale from its tonic, fitted to the chord that plays (a key keeps its
+  note when the chord changes, or moves a semitone). ASSIST (ARP) lights up the keys on the chord's notes, on the beat.
+- **Sounds:** 23 sounds in five families: ambient pads, soft keys, plucks (guitar, mallet, kalimba), keys (e-piano,
+  grand keys) and synths (80s brass, supersaw, pocket lead, an Oberheim-ish brass pad and brass lead).
+- **Drums:** twelve styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
+  dreamcore, angelcore, hip hop and 80s pop (808s, metal hi-hats with rolls, claps, cowbell, washed snares).
 - **Loop:** press REC, play 4 bars of chords, and they play round while you play the melody on top.
 - **The run:** the runner runs while you play. The metres add up, the best run is kept, ten characters unlock, and
   there is always a mission (play 24 chords, run 120 m at once, record a loop...) that gives extra metres.
@@ -33,11 +34,12 @@ Play a song's chords with one finger and a melody over them, while a little runn
 | SCL | Chords: key, voicing, richness, strum |
 | ENV | Groove: BPM, swing, density, sidechain |
 | LFO | Bass: sound, level, riff, filter |
-| EDIT | Melody: cutoff, level, SPACE (a reverb that grows, then echoes), preset |
+| EDIT | Melody: cutoff, level, SPACE (a reverb that grows, then echoes), preset. EDIT again: MELODY 2: glide, octave, vibrato, ASSIST |
 | GLO | Drums: style, kick, hats, snare |
 | HOME | Back to the main page. Held: the title and your progress |
 | REC | The loop: ready → the first chord records 4 bars → it plays. Again: pause / play. Held 1 s: cleared |
 | SEQ | The next character (the unlocked ones) |
+| ARP | ASSIST on / off: the white keys on the chord's notes light up, on the beat |
 | SAVE | The music heard from outside the room |
 | PLAY | Hide the info |
 | OCT- / OCT+ | Octave |
@@ -58,6 +60,7 @@ Locally (Linux x86-64), the simulator and its tests:
     python3 fm1-base/tools/build.py . --host
     build/host/chordrun_host tests/basic.txt build/host     # the basics: screenshots, sounds
     build/host/chordrun_host tests/run.txt build/host       # the run, missions, the loop, the progress kept
+    build/host/chordrun_host tests/melody.txt build/host    # the melody's notes over the chords, MELODY 2, ASSIST
 
 ## Licence and credits
 

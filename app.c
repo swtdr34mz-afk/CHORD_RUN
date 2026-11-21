@@ -17,11 +17,13 @@
  *                   SCL   chords: key, voicing, richness, strum
  *                   ENV   groove: BPM, swing, density, sidechain on/off
  *                   LFO   bass: sound, level, riff, filter
- *                   EDIT  melody: cutoff, level, space (reverb, then echoes), preset
+ *                   EDIT  melody: cutoff, level, space (reverb, then echoes), preset; EDIT again: MELODY 2: glide, octave,
+ *                         vibrato, ASSIST; EDIT a third time: the main page
  *                   GLO   drums: style (each with its own kit), kick, hats, snare
  *   bottom row      HOME  back to the main page (held: the title and the player's progress)
  *                   SAVE  the music heard from outside the room
  *                   SEQ   the next character (the unlocked ones)   PLAY  hide the info
+ *                   ARP   ASSIST: the white keys on the chord's notes light up, on the beat
  *                   REC   the loop: ready, the first chord records 4 bars, then it plays round; REC again: close /
  *                         pause / play; held 1 s: gone
  *   OCT- / OCT+ octave.   HOME + REC held 3 s: back to the first-start settings (a countdown; the progress stays).
@@ -32,7 +34,8 @@
 #include "patterns.h"
 
 /* ------------------------------------------------------------------ settings --- */
-#define SET_MAGIC 0x4F535237u            /* "OSR7" (v7, CHORD RUN: 21 sounds, 8 rhythms, 10 drum styles, the song's own sound) */
+#define SET_MAGIC 0x4F535238u            /* "OSR8" (v8: the melody's glide, octave, vibrato, ASSIST; v7 is taken over) */
+#define SET_MAGIC_V7 0x4F535237u
 typedef struct {
     uint32_t magic;
     uint8_t grid, key, rich, voicing;
@@ -44,7 +47,7 @@ typedef struct {
     uint8_t bpm, swing, dens, side;             /* groove (density: 50 = as written; side: 0 off, 1 on) */
     uint8_t dpat, dkick, dhat, drim;            /* drums */
     uint8_t bsound, blevel, bmotif, bcut;       /* bass */
-    uint8_t rsv_decor[4];                       /* (Blop's aquarium decor: no longer used, kept so the layout stays) */
+    uint8_t mglide, moct, mvib, assist;         /* melody 2: glide, octave (2 = as is), vibrato; ASSIST (the good notes light up) */
     uint8_t mcut, mlev, mrev, msound;           /* melody: cutoff, level, space (reverb, then echoes), preset (0 = as the chords) */
     uint8_t rsv[3];
 } settings_t;
@@ -64,6 +67,7 @@ static void settings_defaults(void)
     set.dpat = 0; set.dkick = 75;   /* the drums start as a plain kick */ set.dhat = 30; set.drim = 25;
     set.bsound = BASS_ROND; set.blevel = 80; set.bmotif = MOTIF_SUIT; set.bcut = 45;
     set.mcut = 50; set.mlev = 80; set.mrev = 30; set.msound = 0;
+    set.mglide = 0; set.moct = 2; set.mvib = 0; set.assist = 0;
     song_style();
 }
 
@@ -177,14 +181,26 @@ static int key_slot(int key, int *var, int *oct)
  * leftmost key; the same for every chord), and that note follows the chord that played last: the chord's scale is the mode of
  * that chord (by its quality) that fits the song's key best; a note that is not in it moves one semitone, to a chord tone
  * if one is there, else down. So a key keeps its note when the chord changes, or moves a semitone at most. */
-static const int8_t MODES[7][7] = {{0,2,4,5,7,9,11}, {0,2,3,5,7,9,10}, {0,1,3,5,7,8,10}, {0,2,4,6,7,9,11},
-                                   {0,2,4,5,7,9,10}, {0,2,3,5,7,8,10}, {0,1,3,5,6,8,10}};   /* ionian dorian phrygian lydian mixolydian aeolian locrian */
+static const int8_t MODES[8][7] = {{0,2,4,5,7,9,11}, {0,2,3,5,7,9,10}, {0,1,3,5,7,8,10}, {0,2,4,6,7,9,11},
+                                   {0,2,4,5,7,9,10}, {0,2,3,5,7,8,10}, {0,1,3,5,6,8,10},
+                                   {0,1,4,5,7,8,10}};   /* ionian dorian phrygian lydian mixolydian aeolian locrian, phrygian dominant
+                                                           (a minor song's V: its harmonic minor) */
+/* the notes of a set's chord (its triad), a bit per pitch class */
+static uint16_t chord_tones(int slot)
+{
+    int8_t iv[6];
+    int nt, i;
+    uint16_t ct = 0;
+    const chord_def_t *d = &grid_w[set.grid][slot];
+    nt = quality_ivs(d->q, 0, iv);
+    for (i = 0; i < nt; i++) ct |= (uint16_t)(1u << ((set.key + d->semi + iv[i]) % 12));
+    return ct;
+}
 static float mel_pitch(int w)
 {
-    int n = grid_n[set.grid], slot = last_slot, root, minor, cand[3], nc, i, j, best = 0, bs = -1, base, deg, p, pc, nt;
+    int n = grid_n[set.grid], slot = last_slot, root, minor, cand[8], nc, i, j, best = 0, bs = -1, base, deg, p, pc;
     const chord_def_t *d;
-    uint16_t song = 0, sc = 0, ct = 0;
-    int8_t iv[6];
+    uint16_t song = 0, sc = 0, ct;
     if (slot < 0 || slot >= n) slot = 0;
     d = &grid_w[set.grid][slot];
     root = (set.key + d->semi) % 12;
@@ -193,9 +209,10 @@ static float mel_pitch(int w)
     for (i = 0; i < 7; i++) song |= (uint16_t)(1u << ((set.key + MODES[minor ? 5 : 0][i]) % 12));
     switch (d->q) {
     case 'm': cand[0] = 1; cand[1] = 5; cand[2] = 2; nc = 3; break;
-    case 'D': cand[0] = 4; nc = 1; break;
+    case 'D': cand[0] = 4; cand[1] = 7; nc = 2; break;
     case 'd': cand[0] = 6; nc = 1; break;
-    default: cand[0] = 0; cand[1] = 3; cand[2] = 4; nc = 3; break;
+    case 's': case 'S': for (i = 0; i < 8; i++) cand[i] = i; nc = 8; break;   /* no third: the mode nearest the song */
+    default: cand[0] = 0; cand[1] = 3; cand[2] = 4; cand[3] = 7; nc = 4; break;
     }
     for (j = 0; j < nc; j++) {
         int s2 = 0;
@@ -203,9 +220,9 @@ static float mel_pitch(int w)
         if (s2 > bs) { bs = s2; best = cand[j]; }
     }
     for (i = 0; i < 7; i++) sc |= (uint16_t)(1u << ((root + MODES[best][i]) % 12));
-    nt = quality_ivs(d->q, 0, iv);                                       /* the chord's own notes (its triad) */
-    for (i = 0; i < nt; i++) ct |= (uint16_t)(1u << ((root + iv[i]) % 12));
-    base = 60 + set.key - (set.key >= 6 ? 12 : 0) + set.octave * 12;   /* the leftmost white key: the song's tonic */
+    if (GRID_DEF[set.grid].lock) sc = song;                              /* this song's melody keeps its own scale */
+    ct = chord_tones(slot);                                              /* the chord's own notes (its triad) */
+    base = 60 + set.key - (set.key >= 6 ? 12 : 0) + set.octave * 12 + ((int)set.moct - 2) * 12;   /* leftmost white key: the tonic */
     deg = w < 0 ? 0 : w;
     p = base + MODES[minor ? 5 : 0][deg % 7] + 12 * (deg / 7);
     pc = ((p % 12) + 12) % 12;
@@ -346,6 +363,7 @@ static void send_lead(void)
     float rev = fm_minf(1.0f, sp * 1.35f), del = sp <= 0.4f ? 0.0f : (sp - 0.4f) * (0.5f / 0.6f);
     eng_lead_sound(set.msound ? &SOUNDS[set.msound - 1] : &SOUNDS[set.sound]);
     eng_lead_params(hz, (float)set.mlev * 0.0125f, rev, del);
+    eng_lead_mod((float)set.mglide * 0.015f, (float)set.mvib * 0.01f);    /* glide up to 0.6 s (as GLIDE shows it) */
 }
 static void send_sound(void) { eng_sound(&SOUNDS[set.sound]); send_lead(); }
 static void send_rhythm(void)
@@ -483,6 +501,7 @@ static void send_bass(void) { eng_bass(set.bsound, set.bmotif, (float)set.blevel
 static int cur_idx = -1, held_idx = -1, active;
 static char chord_txt[16] = APP_NAME;
 static uint32_t hop_at;                                         /* the runner hops (a chord, a melody note) */
+static uint32_t chord_at;                                       /* when the chord began (ASSIST's beat) */
 static void play(int idx)
 {
     chord_t c = build_chord(idx);
@@ -493,6 +512,7 @@ static void play(int idx)
     spread(notes, set.voicing);
     bass = (float)(36 + (c.root + c.bass_off) % 12 + clamp(c.shift, -12, 12));
     chord_name(&c, chord_txt);
+    if (cur_idx != idx || !active) chord_at = now;
     cur_idx = idx;
     hop_at = now;
     { int v, o; last_slot = key_slot(idx, &v, &o); }
@@ -516,11 +536,12 @@ static void rechord(void)
 }
 
 /* ------------------------------------------------------------------ pages --- */
-enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, NPAGE };
-static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS"};
-static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO};
+enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, PG_MELODY2, NPAGE };
+static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS", "MELODY 2"};
+static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO, B_EDIT};   /* EDIT: MELODY, again MELODY 2 */
 static const uint8_t PAGE_RGB[NPAGE][3] = {{200, 255, 60}, {120, 200, 255}, {255, 190, 90}, {255, 120, 90},
-                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}};
+                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}, {210, 170, 255}};
+static const char *const MOCT_NAME[5] = {"-2", "-1", "0", "+1", "+2"};
 
 enum { KD_PCT, KD_OFF, KD_GLIDE, KD_BPM, KD_BIP, KD_LIST };
 enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL, G_MELODY };
@@ -546,6 +567,8 @@ static const kdef_t KD[NPAGE][4] = {
      {"SPACE", &set.mrev, 0, 100, KD_OFF, G_MELODY, 0}, {"PRESET", &set.msound, 0, NSOUND, KD_LIST, G_MELODY, msound_name}},
     {{"STYLE", &set.dpat, 0, NDRUM - 1, KD_LIST, G_DRUMS, DRUM_NAME}, {"KICK", &set.dkick, 0, 100, KD_OFF, G_DRUMS, 0},
      {"HATS", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"SNARE", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
+    {{"GLIDE", &set.mglide, 0, 40, KD_GLIDE, G_MELODY, 0}, {"OCTAVE", &set.moct, 0, 4, KD_LIST, G_MELODY, MOCT_NAME},
+     {"VIBRATO", &set.mvib, 0, 100, KD_OFF, G_MELODY, 0}, {"ASSIST", &set.assist, 0, 1, KD_LIST, G_NONE, ONOFF_NAME}},
 };
 
 static int settings_ok(void)
@@ -570,7 +593,12 @@ void app_init(void)
     for (g = 0; g < NGRID; g++) {
         grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
     }
-    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || !settings_ok())
+    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) == (int)sizeof set && set.magic == SET_MAGIC_V7) {
+        set.magic = SET_MAGIC;                  /* v7 -> v8: the same layout, the melody's new settings at their start */
+        set.mglide = 0; set.moct = 2; set.mvib = 0; set.assist = 0;
+        if (set.dpat >= NDRUM) set.dpat = 0;
+    }
+    if (set.magic != SET_MAGIC || !settings_ok())
         settings_defaults();
     game_init();
     eng_init();
@@ -828,7 +856,6 @@ static void add_metres(uint32_t m)
         char t[24];
         t[0] = 0; text_cat(t, CHR_NAME_B[after - 1]); text_cat(t, " - PRESS SEQ");
         show_toast("NEW CHARACTER", t);
-        eng_blip(BLIP_TOC);
     }
 }
 
@@ -843,7 +870,6 @@ static void mission_check(void)
         int_text((int32_t)bonus, n);
         t[0] = 0; text_cat(t, "+"); text_cat(t, n); text_cat(t, " M");
         show_toast("MISSION DONE", t);
-        eng_blip(BLIP_PLOP);
         mission_start();
         add_metres(bonus);
     }
@@ -1021,6 +1047,11 @@ static void button(int k)
 {
     char t[8];
     int p;
+    if (k == B_EDIT) {                   /* EDIT: MELODY, again: MELODY 2, again: the main page */
+        set.page = (uint8_t)(set.page == PG_MELODY ? PG_MELODY2 : set.page == PG_MELODY2 ? PG_MAIN : PG_MELODY);
+        dirty();
+        return;
+    }
     for (p = 1; p < NPAGE; p++)
         if (PAGE_BTN[p] == k) {          /* a page; the same button again: back to the main page */
             set.page = (uint8_t)(set.page == p ? PG_MAIN : p);
@@ -1049,7 +1080,11 @@ static void button(int k)
         hop_at = plat_ms();
         break;
     }
-    case B_ARP: case B_PLAY: fun(k); return;
+    case B_ARP:                                  /* ASSIST: the white keys that fit the chord light up, on the beat */
+        set.assist ^= 1u;
+        app_say("ASSIST", set.assist ? "THE GOOD NOTES LIGHT UP" : "OFF");
+        break;
+    case B_PLAY: fun(k); return;
     case B_OCTDN:
     case B_OCTUP:
         set.octave = (int8_t)clamp(set.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
@@ -1072,9 +1107,11 @@ static uint32_t valid_keys(void)
     return m;
 }
 
+static uint32_t as_at, as_keys;          /* ASSIST: when its keys were found, and they */
+static int as_slot = -1, as_grid = -1;
 static void input(void)
 {
-    uint32_t keys = plat_keys(), btn = plat_buttons(), k, lit_keys = 0, lit_btn = 0, now = plat_ms();
+    uint32_t keys = plat_keys(), btn = plat_buttons(), k, lit_keys = 0, lit_btn = 0, mid_keys = 0, now = plat_ms();
     int32_t e;
     clock_follow(now);
     if (!kb_ready) kb_init();
@@ -1176,6 +1213,21 @@ static void input(void)
     if (lp.st == LP_PLAY || ((lp.st == LP_REC || lp.st == LP_READY) && (now / (lp.st == LP_REC ? 200u : 500u)) % 2u))
         lit_btn |= 1u << B_REC;
     if (ui.clean) lit_btn |= LED_PLAY_GREEN;
+    if (set.assist) lit_btn |= 1u << B_ARP;
+    /* ASSIST: while a chord plays, the white keys on its notes light up, fully on each beat's first half, softer after */
+    if (set.assist && active && last_slot >= 0) {
+        uint16_t ct = chord_tones(last_slot);
+        float bpm = ck_bpm > 0.0f ? ck_bpm : (float)set.bpm;
+        uint32_t beat = (uint32_t)(60000.0f / bpm), on = beat ? (now - chord_at) % beat < beat / 2u : 1u;
+        float bp = eng_beat();                      /* with a rhythm: on the rhythm's own beat */
+        if (bp >= 0.0f) on = bp < 0.5f;
+        if (now - as_at > 30u || as_slot != last_slot || as_grid != set.grid) {   /* (the notes, ~30 times a second) */
+            as_at = now; as_slot = last_slot; as_grid = set.grid; as_keys = 0;
+            for (k = 0; k < NKEYS; k++)
+                if (kb_white[k] >= 0 && ((ct >> ((int)mel_pitch(kb_white[k]) % 12)) & 1u)) as_keys |= 1u << k;
+        }
+        if (on) lit_keys |= as_keys; else mid_keys |= as_keys & ~lit_keys;
+    }
     /* OCT- / OCT+: lit on the side the octave went, blinking at two octaves */
     if (set.octave) {
         uint32_t ob = 1u << (set.octave < 0 ? B_OCTDN : B_OCTUP);
@@ -1184,7 +1236,7 @@ static void input(void)
     lit_btn |= btn & ((1u << 14) - 1u);  /* a button lights fully while it is pressed */
     plat_lights(lit_btn, lit_keys, 0, (1u << NKEYS) - 1u, 1);
     /* the 12 buttons and OCT- / OCT+ always softly on (one LED colour each: the active one fully lit, the others mid) */
-    plat_lights_mid(((1u << 14) - 1u) & ~lit_btn, 0);
+    plat_lights_mid(((1u << 14) - 1u) & ~lit_btn, mid_keys);
 }
 
 void app_input_only(void) { input(); }
@@ -1656,6 +1708,8 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "reverb")) *got = set.reverb;
     else if (!strncmp(what, "mel", 3) && what[3] >= '0' && what[3] <= '9') *got = (int)mel_pitch(atoi(what + 3));   /* a white key's note now */
     else if (!strcmp(what, "loop")) *got = lp.st;
+    else if (!strcmp(what, "assist")) *got = set.assist;
+    else if (!strcmp(what, "assist_keys")) *got = (int)as_keys;
     else if (!strcmp(what, "loopn")) *got = lp.n;
     else if (!strcmp(what, "metres")) *got = (int)prog.metres;
     else if (!strcmp(what, "metres_h")) *got = (int)(prog.metres / 100u);   /* (hundreds: the run's own metres vary) */

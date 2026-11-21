@@ -7,8 +7,8 @@
 #pragma once
 static const char *const FAMILY_NAME[5] = {"AMBIENT", "SOFT KEYS", "PLUCKS", "KEYS", "SYNTH"};
 #define NFAMILY 5
-#define NSOUND 21
-static const uint8_t FAMILY_OF[NSOUND] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4};   /* the family of each sound */
+#define NSOUND 23
+static const uint8_t FAMILY_OF[NSOUND] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4};   /* the family of each sound */
 static const char *const SOUND_NAME[NSOUND] = {
     "PAPER STRINGS",
     "STILL WATER",
@@ -30,7 +30,9 @@ static const char *const SOUND_NAME[NSOUND] = {
     "GRAND KEYS",
     "80S BRASS",
     "SUPERSAW",
-    "POCKET LEAD"
+    "POCKET LEAD",
+    "OB BRASS PAD",
+    "OB BRASS"
 };
 /* the last number of a sound is its own cutoff in Hz (the CUTOFF knob at 50 %); the knob moves it up and down */
 static const sound_t SOUNDS[NSOUND] = {
@@ -56,6 +58,9 @@ static const sound_t SOUNDS[NSOUND] = {
     {ENGINE_SUB, 0, 0, 14.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.03f, 0.6f, 0.75f, 0.35f, 1.6f, 0.35f, 0.45f, 0.0f, 0.3f, 0.0f, 0.45f, 0.8f, 900.0f},   /* 80S BRASS */
     {ENGINE_SUB, 0, 0, 28.0f, 12.0f, 0.6f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.006f, 0.5f, 0.85f, 0.45f, 0.4f, 0.3f, 0.9f, 0.0f, 0.3f, 0.0f, 0.45f, 0.75f, 2600.0f},   /* SUPERSAW */
     {ENGINE_SUB, 1, 1, 6.0f, 12.0f, 0.35f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.004f, 0.3f, 0.8f, 0.2f, 0.6f, 0.2f, 0.2f, 0.0f, 0.3f, 0.0f, 0.45f, 0.7f, 2200.0f},   /* POCKET LEAD */
+    /* an Oberheim-ish brass: warm detuned saws, a slow swell and lush chorus (a pad), and its short, punchy lead */
+    {ENGINE_SUB, 0, 0, 9.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.09f, 0.8f, 0.8f, 0.7f, 1.0f, 0.45f, 0.7f, 2.0f, 0.25f, 0.0f, 0.45f, 0.8f, 1000.0f},   /* OB BRASS PAD */
+    {ENGINE_SUB, 0, 1, 7.0f, 0.0f, 0.7f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.012f, 0.35f, 0.35f, 0.14f, 1.5f, 0.16f, 0.35f, 0.0f, 0.3f, 0.0f, 0.45f, 0.85f, 1250.0f},   /* OB BRASS */
 };
 #define NRHYTHM 8
 static const char *const RHYTHM_NAME[NRHYTHM] = {"HELD", "QUARTERS", "EIGHTHS", "OFFBEAT", "PUMP", "SYNCOPATED", "TRESILLO", "HALF-TIME"};
@@ -70,35 +75,34 @@ static const struct { const char *s; float gate, swing, atk; } RHYTHM_DEF[NRHYTH
     {"X--x--x-X--x--x-", 0.7f, 0.0f, 0.0f},
     {"X-------x-----x-", 0.9f, 0.0f, 0.0f},
 };
-#define NGRID 19
+#define NGRID 17
 /* chord SETS: the chords of a song, one per BLACK key from the left (up to 8 of them); the white keys play a melody in the
  * scale of the chord that sounds. A chord is its semitones above the set's key + a quality (M maj, V dominant-major, m, D dom7,
  * d dim, s sus4, S sus2, a aug); key 0 = C .. 11 = B is the song's own key, rich the richness it starts with.
  * Then the song's own sound (CHORD RUN), set when the song is chosen: the chords' sound, the melody's (0 = as the chords, else
- * the sound + 1), the bass's sound and riff, the chord rhythm (taken only when a rhythm plays), the drums' style, the tempo. */
+ * the sound + 1), the bass's sound and riff, the chord rhythm (taken only when a rhythm plays), the drums' style, the tempo,
+ * and lock: 1 = the melody keeps the song's own scale on every chord (it does not follow the chords). */
 static const struct {
     const char *name, *by;
     uint8_t key, rich;
     const char *white;
-    uint8_t snd, msnd, bsnd, bmot, rhy, dpat, bpm;
+    uint8_t snd, msnd, bsnd, bmot, rhy, dpat, bpm, lock;
 } GRID_DEF[NGRID] = {
-    {"LET IT BE", "THE BEATLES", 0, 0, "0M 7M 9m 5M", 17, 12, 2, 0, 1, 1, 72},
-    {"STAIRWAY TO HEAVEN", "LED ZEPPELIN", 9, 0, "0m 3M 5M 8M 10M 7M", 13, 3, 1, 0, 2, 7, 72},
-    {"TAKE ON ME", "A HA", 9, 0, "0M 9m 5M 7M 2m", 18, 21, 5, 3, 2, 1, 84},
-    {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M", 18, 16, 2, 0, 5, 5, 93},
-    {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 3M 5m 7s", 17, 11, 6, 6, 5, 1, 93},
-    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 7m", 13, 18, 1, 0, 2, 1, 105},
-    {"HELLO", "ADELE", 5, 0, "0m 3M 10M 5M", 17, 12, 1, 1, 1, 1, 79},
-    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M", 14, 15, 1, 6, 6, 6, 96},
-    {"BLINDING LIGHTS", "THE WEEKND", 5, 0, "0m 7m 10M 5M", 19, 19, 5, 7, 2, 1, 86},
-    {"SOMEONE LIKE YOU", "ADELE", 9, 0, "0M 7M 9m 5M", 17, 12, 1, 0, 2, 7, 70},
-    {"CREEP", "RADIOHEAD", 7, 0, "0M 4M 5M 5m", 13, 3, 2, 0, 2, 1, 92},
-    {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M", 3, 11, 2, 0, 7, 7, 80},
-    {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M", 13, 18, 1, 1, 2, 1, 96},
-    {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M", 17, 17, 2, 0, 1, 1, 70},
-    {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M", 13, 13, 1, 0, 5, 2, 145},
-    {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M", 16, 11, 6, 6, 5, 2, 138},
-    {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M", 19, 21, 3, 2, 3, 0, 120},
-    {"WENN DAS LIEBE IST", "NINA CHUBA", 5, 0, "0m 10M 8M 5m 7M 5M", 16, 16, 2, 6, 5, 5, 100},
-    {"PERFECT", "ED SHEERAN", 8, 0, "0M 9m 5M 7M", 13, 12, 2, 0, 6, 7, 95},
+    {"LET IT BE", "THE BEATLES", 0, 0, "0M 7M 9m 5M", 17, 12, 2, 0, 1, 1, 72, 0},
+    {"TAKE ON ME", "A HA", 9, 0, "0M 9m 5M 7M 2m", 18, 21, 5, 3, 2, 1, 84, 0},
+    {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M", 21, 23, 2, 0, 1, 11, 93, 0},
+    {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 3M 5m 7s", 17, 11, 6, 6, 5, 1, 93, 0},
+    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 7m", 13, 18, 1, 0, 2, 1, 105, 0},
+    {"HELLO", "ADELE", 5, 0, "0m 3M 10M 8M", 17, 12, 1, 1, 1, 1, 79, 0},
+    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M", 14, 15, 1, 6, 6, 6, 96, 0},
+    {"BLINDING LIGHTS", "THE WEEKND", 5, 0, "0m 7m 10M 5M", 19, 19, 5, 7, 2, 1, 86, 1},
+    {"SOMEONE LIKE YOU", "ADELE", 9, 0, "0M 7M 9m 5M", 17, 12, 1, 0, 2, 7, 70, 0},
+    {"CREEP", "RADIOHEAD", 7, 0, "0M 4M 5M 5m", 13, 3, 2, 0, 2, 1, 92, 0},
+    {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M", 3, 11, 2, 0, 7, 7, 80, 0},
+    {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M", 13, 18, 1, 1, 2, 1, 96, 0},
+    {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M", 17, 17, 2, 0, 1, 1, 70, 0},
+    {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M", 13, 13, 1, 0, 5, 10, 73, 0},
+    {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M", 16, 11, 6, 6, 5, 10, 70, 0},
+    {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M", 19, 21, 3, 2, 3, 0, 120, 0},
+    {"PERFECT", "ED SHEERAN", 8, 0, "0M 9m 5M 7M", 13, 12, 2, 0, 6, 7, 95, 0},
 };

@@ -63,6 +63,8 @@ void eng_stop(void);
 void eng_lead_sound(const sound_t *p);                      /* the melody voice's own sound */
 void eng_lead_params(float cut_hz, float level, float reverb, float delay);   /* its cutoff (Hz), level (1 = as the sound),
                                                                                reverb and echo sends 0..1 */
+void eng_lead_mod(float glide_s, float vibrato);   /* the melody's glide (s, from note to note while it sounds) and
+                                                       vibrato depth 0..1 (half a semitone at most, it fades in) */
 void eng_lead(float m);               /* the melody voice: a MIDI pitch = note on, negative = release */
 /* an outside MIDI clock's beat: the even step STEP (0..15) began at AT_MS (plat_ms); STEP -1: the clock is gone */
 void eng_sync(int step, uint32_t at_ms);
@@ -85,4 +87,5 @@ void eng_render(int32_t *lr, uint32_t n, float gain);
  * kick fell on it; eng_hit_step: the last step where the chords hit (accent 1, soft 2) */
 int eng_last_step(uint32_t *at_ms, int *kick);
 int eng_last_hit(uint32_t *at_ms);
+float eng_beat(void);                  /* where the rhythm is in its beat, 0..1 (-1: it does not run) */
 float eng_level(void);                 /* output level, 0..1, smoothed */

@@ -43,7 +43,7 @@ static float *const ap_buf[4] = {ap_buf0, ap_buf1, ap_buf2, ap_buf3};
 
 /* ------------------------------------------------------------------ command queue (main loop -> render) --- */
 enum { CMD_SOUND, CMD_RHYTHM, CMD_CHORD, CMD_STOP, CMD_PARAMS, CMD_FX, CMD_GROOVE, CMD_DRUMS, CMD_BASS, CMD_MUFFLE,
-       CMD_BLIP, CMD_PANIC, CMD_SYNC, CMD_LEAD, CMD_LSOUND, CMD_LPARAM };
+       CMD_BLIP, CMD_PANIC, CMD_SYNC, CMD_LEAD, CMD_LSOUND, CMD_LPARAM, CMD_LMOD };
 typedef struct {
     uint8_t t;
     union {
@@ -61,6 +61,7 @@ typedef struct {
         struct { float m; } ld;
         sound_t ls;
         struct { float cut, lev, rev, del; } lq;
+        struct { float glide, vib; } lm;
     } u;
 } cmd_t;
 #define QN 16u
@@ -154,6 +155,7 @@ static struct {
     uint8_t ld_st;       /* 0 off, 1 attack, 2 decay / sustain, 3 release */
     sound_t lp;          /* the melody's sound, cutoff (Hz), level, reverb send */
     float lcut, llev, lrev, ldel;
+    float lglide, lvib, ld_tgt, ld_vph, ld_vamt;   /* the melody's glide (s) and vibrato, its target pitch, the LFO */
     uint32_t lr_w[4], lr_apw0, lr_apw1;
     float lr_lp[4], lr_ph[4], lr_en;
 } E;
@@ -208,6 +210,7 @@ void eng_lead_params(float cut_hz, float level, float reverb, float delay)
     push(&c);
 }
 void eng_lead(float m) { cmd_t c; c.t = CMD_LEAD; c.u.ld.m = m; push(&c); }
+void eng_lead_mod(float glide_s, float vibrato) { cmd_t c; c.t = CMD_LMOD; c.u.lm.glide = glide_s; c.u.lm.vib = vibrato; push(&c); }
 void eng_sync(int step, uint32_t at_ms) { cmd_t c; c.t = CMD_SYNC; c.u.y.step = step; c.u.y.at_ms = at_ms; push(&c); }
 void eng_panic(void) { cmd_t c; c.t = CMD_PANIC; push(&c); }
 void eng_params(float bpm, float cut_hz, float q, float side, int drums_on)
@@ -256,6 +259,18 @@ int eng_last_hit(uint32_t *at_ms)
     return E.last_hit;
 }
 float eng_level(void) { return E.level; }
+static float step_len(int i);
+float eng_beat(void)
+{
+    int cur;
+    float len, f;
+    if (!E.running) return -1.0f;
+    cur = (E.step + 15) & 15;                   /* the step under way (E.step is the next one) */
+    len = step_len(cur);
+    f = len > 0.0f ? 1.0f - E.step_left / len : 0.0f;
+    f = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
+    return ((float)(cur & 3) + f) * 0.25f;
+}
 
 static inline float rndu(void) { return 0.5f + 0.5f * rnd(); }
 static uint32_t now_ms(void) { return (uint32_t)((float)E.samples * (1000.0f / SR)); }
@@ -568,8 +583,13 @@ static void run_commands(void)
         case CMD_LPARAM: E.lcut = c->u.lq.cut; E.llev = c->u.lq.lev; E.lrev = c->u.lq.rev; E.ldel = c->u.lq.del; break;
         case CMD_LEAD:
             if (c->u.ld.m < 0.0f) { if (E.ld_st) E.ld_st = 3; }
-            else { E.ld_m = c->u.ld.m; E.ld_st = 1; E.ld_fe = 1.0f; E.ld_ie = 1.0f; E.ld_exc = 1; }
+            else {
+                E.ld_tgt = c->u.ld.m;
+                if (!(E.ld_st && E.lglide > 0.005f)) E.ld_m = E.ld_tgt;   /* glide only from a note that still sounds */
+                E.ld_st = 1; E.ld_fe = 1.0f; E.ld_ie = 1.0f; E.ld_exc = 1; E.ld_vamt = 0.0f;
+            }
             break;
+        case CMD_LMOD: E.lglide = c->u.lm.glide; E.lvib = c->u.lm.vib; break;
         case CMD_PANIC: E.ld_st = 0; E.ld_e = 0.0f; E.active = 0; E.running = 0; E.e = 0.0f; E.stage = 0; midi_chord_off(); midi_bass_off(); break;
         case CMD_SYNC: {    /* a beat of the outside clock: step (even) began at_ms (plat_ms) */
             int st = c->u.y.step;
@@ -701,18 +721,25 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
             E.wob_ph += p->wob_rate * (float)cn / SR;
             if (E.wob_ph >= 1.0f) E.wob_ph -= 1.0f;
             if (E.ld_st) {
-                float lb = E.lp.cut > 0.0f ? E.lp.cut * E.lcut * (1.0f / CUT_MID_HZ) : E.lcut;
-                float lfc = fm_minf(SR * 0.45f, lb * fm_exp2f(E.lp.fenv * E.ld_fe + (E.ld_m - 60.0f) * (0.6f / 12.0f)));   /* follows the note a bit */
+                float lb = E.lp.cut > 0.0f ? E.lp.cut * E.lcut * (1.0f / CUT_MID_HZ) : E.lcut, lfc, lm;
+                if (E.ld_m != E.ld_tgt) {                       /* the glide: on to the new note */
+                    E.ld_m += (E.ld_tgt - E.ld_m) * (1.0f - fm_expf(-(float)cn / (fm_maxf(0.005f, E.lglide) * SR * 0.35f)));
+                    if (fm_fabsf(E.ld_tgt - E.ld_m) < 0.002f) E.ld_m = E.ld_tgt;
+                }
+                E.ld_vph += 5.5f * (float)cn / SR; if (E.ld_vph >= 1.0f) E.ld_vph -= 1.0f;   /* the vibrato, fading in */
+                E.ld_vamt = fm_minf(1.0f, E.ld_vamt + (float)cn / (0.4f * SR));
+                lm = E.ld_m + E.lvib * 0.5f * E.ld_vamt * fm_sin_turns(E.ld_vph);
+                lfc = fm_minf(SR * 0.45f, lb * fm_exp2f(E.lp.fenv * E.ld_fe + (lm - 60.0f) * (0.6f / 12.0f)));   /* follows the note a bit */
                 if (leng == ENGINE_FM) {
-                    ldi1 = mtof(E.ld_m) / SR;
+                    ldi1 = mtof(lm) / SR;
                     ldi2 = ldi1 * E.lp.ratio;
                 } else if (leng == ENGINE_PLUCK) {
-                    ldL = fm_minf(SR / mtof(E.ld_m), (float)(KS_N - 4u));
-                    if (E.ld_exc) excite_buf(lks_buf, E.ld_w, E.ld_m, E.lp.bright);
+                    ldL = fm_minf(SR / mtof(lm), (float)(KS_N - 4u));
+                    if (E.ld_exc) excite_buf(lks_buf, E.ld_w, lm, E.lp.bright);
                     lfc = fm_minf(lfc, 2400.0f);
                 } else {
-                    ldi1 = mtof(E.ld_m - E.lp.det * 0.005f) / SR;
-                    ldi2 = mtof(E.ld_m + E.lp.oct2 + E.lp.det * 0.005f) / SR;
+                    ldi1 = mtof(lm - E.lp.det * 0.005f) / SR;
+                    ldi2 = mtof(lm + E.lp.oct2 + E.lp.det * 0.005f) / SR;
                 }
                 E.ld_exc = 0;
                 lda = fm_minf(0.95f, 6.2831853f * lfc / SR);
@@ -1130,7 +1157,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     if (E.bl_kind == BLIP_PLOP) bv = fm_sin_turns(E.bl_ph);
                     else bv = fm_sin_turns(E.bl_ph) * 0.6f + fm_sin_turns(E.bl_ph2) * 0.3f + rnd() * 0.3f * E.bl_env;
                     bv *= E.bl_env * 0.22f;
-                    E.bl_f *= E.bl_df;
+                    E.bl_f = fm_minf(E.bl_f * E.bl_df, 6000.0f);   /* (it rose without end: no number left, a stutter) */
                     E.bl_env *= E.bl_dec;
                     l += bv; r += bv;
                 }

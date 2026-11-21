@@ -5,9 +5,9 @@
 
 /* 16 steps: X accent, x soft, . rest; hi-hat row: o open, 2 / 3 / 4 a roll of that many hits in the step.
  * Ten current styles, each with its own kit (CHORD RUN). */
-#define NDRUM 10
+#define NDRUM 12
 static const char *const DRUM_NAME[NDRUM] = {"HOUSE", "POP", "TRAP", "PHONK", "DRILL", "AFROBEAT", "REGGAETON", "LO-FI",
-                                             "DREAMCORE", "ANGELCORE"};
+                                             "DREAMCORE", "ANGELCORE", "HIP HOP", "80S POP"};
 static const struct { const char *k, *h, *s, *r; } DRUM_DEF[NDRUM] = {
     /* kick                hi-hat              snare / clap        perc */
     {"X...X...X...X...", "..o...o...o...o.", "....X.......X...", "...x......x...x."},   /* house: four on the floor, open hats, clap */
@@ -20,6 +20,8 @@ static const struct { const char *k, *h, *s, *r; } DRUM_DEF[NDRUM] = {
     {"X......X..X.....", "x.x.x.x.x.x.x.x.", "....X.......X...", "................"},   /* lo-fi: soft, dusty */
     {"X.........X.....", "..o.......o.....", "........X.......", "......x.......x."},   /* dreamcore: slow, washed, a chime */
     {"X.X.......XX....", "x.x.x.x.x.x.x.x.", "....X..x.x..X..x", ".......x.......x"},   /* angelcore: a soft break, airy */
+    {"X.......X.......", "x.x.x.x.x.x.x.x.", "....X.......X...", "................"},   /* hip hop: kick on 1 and 3, snare on 2 and 4 */
+    {"X.......X.X.....", "xxxxxxxxxxxxxxxx", "....X.......X...", "................"},   /* 80s pop: a big snare, sixteenths */
 };
 
 /* each pattern's kit: kick (base Hz, sweep Hz, pitch drop s, body s, drive, hold s, click), hi-hat (tone, closed s, open s,
@@ -45,6 +47,10 @@ static const kit_t DRUM_KIT[NDRUM] = {
     {46.0f, 70.0f, 0.035f, 0.35f, 1.1f, 0.020f, 0.05f, 0.35f, 0.040f, 0.35f, 0.30f, 1760.0f, 2640.0f, 0.300f, 0.00f, 160.0f, 0.50f, 0.40f, 0.30f, 0.0f, 0.65f},
     /* angelcore: a light break, airy hats, a chime */
     {54.0f, 140.0f, 0.020f, 0.14f, 1.6f, 0.010f, 0.40f, 0.85f, 0.020f, 0.14f, 0.60f, 2093.0f, 3136.0f, 0.350f, 0.00f, 210.0f, 0.45f, 0.20f, 0.65f, 0.0f, 0.45f},
+    /* hip hop: a round kick with some boom, a snare with body */
+    {50.0f, 120.0f, 0.030f, 0.25f, 1.8f, 0.040f, 0.40f, 0.70f, 0.025f, 0.10f, 0.60f, 1700.0f, 500.0f, 0.010f, 0.30f, 200.0f, 0.45f, 0.16f, 0.60f, 0.0f, 0.12f},
+    /* 80s pop: a tight kick, a big snare in a big room */
+    {55.0f, 140.0f, 0.020f, 0.15f, 1.5f, 0.020f, 0.50f, 0.75f, 0.030f, 0.12f, 0.50f, 1700.0f, 500.0f, 0.010f, 0.30f, 200.0f, 0.50f, 0.24f, 0.55f, 0.0f, 0.50f},
 };
 
 static const char *const BASS_NAME[NBASS_SOUND] = {"OFF", "SUB", "ROUND", "ACID", "REESE", "PLUCK", "FM"};

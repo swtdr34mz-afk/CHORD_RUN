@@ -337,6 +337,9 @@ wait 100
 expect missions 4
 expect mission 4
 expect grid 2
+turn SELECT -1
+wait 50
+expect grid 1
 # mission 5: all the chords of a song (TAKE ON ME: five)
 key 1 down
 wait 100

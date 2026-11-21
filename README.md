@@ -30,7 +30,7 @@ Play a song's chords with one finger and a melody over them, while a little runn
 
 | Control | What it does |
 | --- | --- |
-| Black keys | The song's chords. With a rhythm the chord keeps playing (the same key again stops it); without one (HELD) it plays while you hold the key. The black keys right of the song's chords play the melody too: the semitone above the white key to their left (the notes the scale leaves out). They light softly when their note fits the chord, and stay dark when it rubs (a semitone over one of the chord's notes) |
+| Black keys | The song's chords. With a rhythm the chord keeps playing (the same key again stops it); without one (HELD) it plays while you hold the key. The black keys right of the song's chords play the melody too: the semitone above the white key to their left (the notes the scale leaves out). They light softly when their note fits the chord (one of its notes, or the scale's with no chord note a semitone away), and stay dark otherwise |
 | White keys | The melody |
 | SELECT | Song (its own sounds, tempo and drums come with it) |
 | ALGORITHM | Chord rhythm (9): held (while you hold the key), FULL (the chord held until you press its key again, with the drums), quarters, eighths, offbeat, pump, syncopated, tresillo, half-time |

@@ -12,7 +12,8 @@ static const struct { const char *k, *h, *s, *r; } DRUM_DEF[NDRUM] = {
     /* kick                hi-hat              snare / clap        perc */
     {"X...X...X...X...", "..o...o...o...o.", "....X.......X...", "...x......x...x."},   /* house: four on the floor, open hats, clap */
     {"X.......X.x.....", "x.x.x.x.x.x.x.x.", "....X.......X...", "................"},   /* pop */
-    {"X......X..X.....", "x.x.x.x3x.x.x.4.", "........X.......", "................"},   /* trap: half time, 808, rolls */
+    {"X.......X.......", "x.x.x.x3x.x.x.4.", "....X.......X...", "................"},   /* trap: as hip hop (kick on 1 and 3, the clap on 2
+                                                                                           and 4), its 808, hat rolls */
     {"X.....X...X..X..", "x.x.x.x.x.x.x.x.", "....X.......X...", "x.xx..x.x.xx..x."},   /* phonk: cowbell */
     {"X..X......X..X..", "x.x3x.x.x.x3x.x.", "........X.....x.", "................"},   /* drill */
     {"X......X..X.....", "x.xxx.xxx.xxx.xx", "...x..x....x..x.", "X..X..X...X.X..."},   /* afrobeat: shaker, clave */

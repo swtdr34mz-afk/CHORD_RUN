@@ -208,16 +208,23 @@ static uint16_t chord_tones(int slot)
     for (i = 0; i < nt; i++) ct |= (uint16_t)(1u << ((set.key + d->semi + iv[i]) % 12));
     return ct;
 }
-static float mel_pitch(int w)
+/* a minor song: it starts or ends on its minor tonic */
+static int song_minor(void)
 {
-    int n = grid_n[set.grid], slot = last_slot, root, minor, cand[8], nc, i, j, best = 0, bs = -1, base, deg, p, pc;
+    int n = grid_n[set.grid];
+    return (grid_w[set.grid][0].semi == 0 && grid_w[set.grid][0].q == 'm')
+        || (grid_w[set.grid][n - 1].semi == 0 && grid_w[set.grid][n - 1].q == 'm');
+}
+/* the scale the melody plays over a chord (a bit per pitch class): the chord's mode that fits the song's key best, or with
+ * lock the song's own */
+static uint16_t mel_scale(int slot)
+{
+    int root, minor = song_minor(), cand[8], nc, i, j, best = 0, bs = -1;
     const chord_def_t *d;
-    uint16_t song = 0, sc = 0, ct;
-    if (slot < 0 || slot >= n) slot = 0;
+    uint16_t song = 0, sc = 0;
+    if (slot < 0 || slot >= (int)grid_n[set.grid]) slot = 0;
     d = &grid_w[set.grid][slot];
     root = (set.key + d->semi) % 12;
-    minor = (grid_w[set.grid][0].semi == 0 && grid_w[set.grid][0].q == 'm')            /* a minor song: it starts or ends on its minor tonic */
-         || (grid_w[set.grid][n - 1].semi == 0 && grid_w[set.grid][n - 1].q == 'm');
     for (i = 0; i < 7; i++) song |= (uint16_t)(1u << ((set.key + MODES[minor ? 5 : 0][i]) % 12));
     switch (d->q) {
     case 'm': cand[0] = 1; cand[1] = 5; cand[2] = 2; nc = 3; break;
@@ -233,6 +240,14 @@ static float mel_pitch(int w)
     }
     for (i = 0; i < 7; i++) sc |= (uint16_t)(1u << ((root + MODES[best][i]) % 12));
     if (GRID_DEF[set.grid].lock) sc = song;                              /* this song's melody keeps its own scale */
+    return sc;
+}
+static float mel_pitch(int w)
+{
+    int n = grid_n[set.grid], slot = last_slot, minor = song_minor(), base, deg, p, pc;
+    uint16_t sc, ct;
+    if (slot < 0 || slot >= n) slot = 0;
+    sc = mel_scale(slot);
     ct = chord_tones(slot);                                              /* the chord's own notes (its triad) */
     base = 60 + set.key - (set.key >= 6 ? 12 : 0) + set.octave * 12 + ((int)set.moct - 2) * 12;   /* leftmost white key: the tonic */
     deg = w < 0 ? 0 : w;
@@ -407,7 +422,7 @@ static void send_rhythm(void)
     r.gate = RHYTHM_DEF[def].gate;
     r.swing = RHYTHM_DEF[def].swing;
     r.atk = RHYTHM_DEF[def].atk;
-    if (!r.hold)
+    if (!r.hold && !r.sus)                                       /* (FULL's "=" is no pattern) */
         for (i = 0; i < 16; i++) {
             if (s[i] == 'X' || s[i] == 'x') {
                 int len = 1;
@@ -1335,21 +1350,23 @@ static void guide_press(int k, uint32_t now)
 static uint32_t as_at, as_keys;          /* ASSIST: when its keys were found, and they */
 static uint32_t bf_at, bf_keys;          /* the melody's black keys that fit the chord: when they were found, and they */
 static int bf_slot = -2, bf_grid = -1;
-/* A melody black key fits the chord when its note is one of the chord's or is not a semitone above one of them: a note a
- * semitone over a chord note rubs against it (C# over C, Ab over C's G, F over E: the "avoid notes"); the others are colour
- * (Bb over C: its 7th, F# over A minor: the dorian 6th, Eb over C: the blue third) */
+/* A melody black key fits the chord when its note is one of the chord's, or one of the melody's scale over it (the white
+ * keys' notes) with no chord note a semitone away (that rubs: F over E, Db over Bb major's D). The notes outside the scale
+ * (Bb over C, D over F minor: colour at best) stay dark: in BLINDING LIGHTS too many lit that did not fit */
 static uint32_t black_fit_keys(void)
 {
     int k, slot = last_slot;
     uint32_t m = 0;
-    uint16_t ct;
+    uint16_t ct, sc;
     if (slot < 0 || slot >= (int)grid_n[set.grid]) slot = 0;
     ct = chord_tones(slot);
+    sc = mel_scale(slot);
     for (k = 0; k < NKEYS; k++) {
         int pc;
         if (!mel_black(k)) continue;
         pc = (((int)key_pitch(k) % 12) + 12) % 12;
-        if (((ct >> pc) & 1u) || !((ct >> ((pc + 11) % 12)) & 1u)) m |= 1u << k;
+        if (((ct >> pc) & 1u) || (((sc >> pc) & 1u) && !((ct >> ((pc + 11) % 12)) & 1u) && !((ct >> ((pc + 1) % 12)) & 1u)))
+            m |= 1u << k;
     }
     return m;
 }
@@ -2023,6 +2040,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "dpat")) *got = set.dpat;
     else if (!strcmp(what, "msound")) *got = set.msound;
     else if (!strcmp(what, "mrev")) *got = set.mrev;
+    else if (!strcmp(what, "glide")) *got = set.glide;
     else return 0;
     return 1;
 }

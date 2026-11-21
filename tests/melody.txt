@@ -18,15 +18,16 @@ expect lead 1
 key 10 up
 wait 30
 expect lead 0
-# they light softly when their note fits the chord: over C, Bb and Eb (C#, F and Ab rub: a semitone over C, E, G)
-expect black_fit 4228096
+# they light softly when their note fits the chord (a chord note, or the scale's with no chord note a semitone away):
+# over C none (Bb, C#, Eb, Ab are outside the scale, F rubs on E)
+expect black_fit 0
 key 1 up
-key 5 down
+key 3 down
 wait 50
-# over A minor: Eb and Ab (Bb, C# and F rub)
-expect black_fit 1081344
+# over G: F (G7's seventh)
+expect black_fit 131072
 shot black_fit.png
-key 5 up
+key 3 up
 key 1 down
 wait 50
 # ASSIST (MELODY 2, K4): the white keys on the chord's notes (C E G) light up
@@ -102,6 +103,16 @@ expect grid 7
 key 8 down
 wait 50
 expect mel5 73
+# its black keys over Bb major: D (the chord's third) and Ab (its seventh); Db rubs on D, A and F# are outside the scale
+expect black_fit 4228096
+key 8 up
+key 1 down
+wait 50
+# over F minor: Ab only (its third)
+expect black_fit 32768
+key 1 up
+key 8 down
+wait 50
 key 8 up
 wait 50
 # EDIT: MELODY, again: MELODY 2 (glide, octave, vibrato, ASSIST), again: the main page

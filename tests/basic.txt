@@ -37,6 +37,31 @@ wait 30
 key 1 up
 wait 400
 expect active 0
+# FULL with GLIDE: the next chord is struck again as it glides (the piano had faded: it slid on silent)
+turn K2 1
+wait 200
+turn K2 1
+wait 200
+turn K2 1
+wait 200
+key 1 down
+wait 30
+key 1 up
+wait 3000
+peakreset
+key 3 down
+wait 30
+key 3 up
+wait 400
+expect peak_db_min -22
+key 3 down
+wait 30
+key 3 up
+wait 400
+expect active 0
+turn K2 -40
+wait 200
+expect glide 0
 turn ALGO -1
 wait 30
 expect rhythm 0

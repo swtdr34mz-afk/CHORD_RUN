@@ -710,7 +710,13 @@ static void chord_cmd(const float *notes, float bass, float glide)
         check_run();
         return;
     }
-    if (gc >= 1.0f) { set_notes(notes, bass, gc); midi_retarget(); return; }
+    if (gc >= 1.0f) {
+        set_notes(notes, bass, gc); midi_retarget();
+        /* held (rhythm OFF, FULL): no step strikes the chord again, so a struck sound (piano, pluck, FM keys) or one that has
+         * faded is struck anew as it glides (it slid on silent: the chord did not play); a pad that holds just glides */
+        if (RH_HELD && (E.p.engine != ENGINE_SUB || E.stage == 0 || E.stage == 4 || E.e < 0.05f)) hit(1.0f, 1e9f, 0.0f);
+        return;
+    }
     if (E.e > 0.002f) {                 /* a quick fade, then the new chord as a fresh hit */
         copy(E.pend_notes, notes, sizeof E.pend_notes);
         E.pend_bass = bass;
@@ -719,6 +725,7 @@ static void chord_cmd(const float *notes, float bass, float glide)
         if (E.fade_left <= 0.0f) E.fade_left = E.fade_len;
     } else {
         set_notes(notes, bass, 0.0f);
+        if (RH_HELD) hit(1.0f, 1e9f, 0.0f);   /* (held: the faded chord struck again, as no step will) */
     }
 }
 

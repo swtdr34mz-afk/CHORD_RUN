@@ -1,5 +1,5 @@
 # CHORD RUN (OSR-1 / Blop) in the host simulator:
-#   tools/build.py /path/to/osr1 --host, then osr1/build/host/osr1_host osr1/tests/basic.txt osr1/build/host
+#   tools/build.py /path/to/osr1 --host, then build/host/chordrun_host tests/basic.txt build/host
 wait 600
 shot boot.png
 # first start: no drums, no FX, a light reverb
@@ -170,20 +170,13 @@ expect page 5
 tap HOME
 wait 30
 expect page 0
-# the bottom row: bowl (muffled), light, clean screen, the next character
+# the bottom row: SAVE (the music muffled), PLAY (no info), SEQ (the next character)
 tap SAVE
 wait 900
 expect bowl 1
-shot bowl.png
 tap SAVE
 wait 600
 expect bowl 0
-tap ARP
-wait 500
-expect dark 1
-shot dark.png
-tap ARP
-wait 30
 tap PLAY
 wait 600
 expect clean 1
@@ -193,7 +186,8 @@ wait 30
 expect clean 0
 tap SEQ
 wait 300
-shot pirouette.png
+expect character 1
+shot character.png
 # HOME held: the help screen
 press HOME
 wait 900

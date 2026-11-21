@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Obsimo (OSR Records) */
-/* OSR-1 data: generated from the browser prototype (gen_data.mjs), then edited by hand (keep this if you regenerate):
+/* CHORD RUN data (from OSR-1's, once generated from Blop's browser prototype, now written by hand):
  * the names translated to English, 2-STEP moved first in the rhythms and the sounds (families, SOUNDS)
  * replaced by 13 sounds after DRIFT's factory presets (Leo Kuroshita, Hügelton Instruments, MIT; see CREDITS.md).
- * Do not regenerate with gen_data.mjs: it would bring the old sounds back and drop NSOUND, FAMILY_OF and the cut column. */
+ * CHORD RUN: 8 more sounds (plucks, keys, synths), 8 chord rhythms, the song sets with their own sounds. */
 #pragma once
 static const char *const FAMILY_NAME[5] = {"AMBIENT", "SOFT KEYS", "PLUCKS", "KEYS", "SYNTH"};
 #define NFAMILY 5

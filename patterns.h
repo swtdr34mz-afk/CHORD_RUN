@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Obsimo (OSR Records) */
-/* OSR-1: drum patterns, bass sounds and motifs, the screen's cast. Written by hand (data.h is generated). */
+/* CHORD RUN (from OSR-1): drum styles and their kits, bass sounds and riffs. Written by hand. */
 #pragma once
 
 /* 16 steps: X accent, x soft, . rest; hi-hat row: o open, 2 / 3 / 4 a roll of that many hits in the step.
@@ -51,18 +51,4 @@ static const char *const BASS_NAME[NBASS_SOUND] = {"OFF", "SUB", "ROUND", "ACID"
 static const char *const MOTIF_NAME[NMOTIF] = {"FOLLOW", "HOLD", "OFFBEAT", "OCTAVES", "HALVES", "GALLOP",
                                                "SYNCOPE", "ROLLING"};
 
-#define NCREATURE 8
-static const char *const CREATURE_NAME[NCREATURE] = {"PUFFER", "SUNFISH", "JELLY", "STARFISH", "OCTOPUS", "SEAHORSE",
-                                                     "MANTA", "CRAB"};
-#define NEYE 6
-static const char *const EYE_NAME[NEYE] = {"ROUND", "HEART", "STAR", "LASER", "SPIRAL", "CROSS"};
-#define NDECOR 8
-static const char *const DECOR_NAME[NDECOR] = {"BLUE", "MOIRE", "EMBERS", "ACID", "ABYSS", "CORAL", "AURORA",
-                                               "GREEN CRT"};
-/* the eyes' light, per background */
-static const float DECOR_EYE[NDECOR][3] = {{0.85f, 0.95f, 1.0f}, {1.0f, 0.35f, 0.75f}, {1.0f, 0.8f, 0.3f},
-                                           {0.4f, 1.0f, 0.95f}, {0.45f, 0.9f, 1.0f}, {1.0f, 0.95f, 0.7f},
-                                           {0.7f, 1.0f, 0.6f}, {0.5f, 1.0f, 0.45f}};
-#define NACC 6
-static const char *const ACC_NAME[NACC] = {"NONE", "PARTY HAT", "CROWN", "HEADPHONES", "BOW", "ANTENNA"};
 static const char *const ONOFF_NAME[2] = {"OFF", "ON"};

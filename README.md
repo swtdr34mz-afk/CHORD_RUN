@@ -56,8 +56,8 @@ Locally (Linux x86-64), the simulator and its tests:
 
     git clone --recursive <this repository> && cd plop
     python3 fm1-base/tools/build.py . --host
-    build/host/blop_host tests/basic.txt build/host     # the basics: screenshots, sounds
-    build/host/blop_host tests/run.txt build/host       # the run, missions, the loop, the progress kept
+    build/host/chordrun_host tests/basic.txt build/host     # the basics: screenshots, sounds
+    build/host/chordrun_host tests/run.txt build/host       # the run, missions, the loop, the progress kept
 
 ## Licence and credits
 

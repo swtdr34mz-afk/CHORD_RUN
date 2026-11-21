@@ -1,11 +1,12 @@
-# BLOP build settings (fm1-base tools/build.py)
-name = "BLOP"
-id_prefix = "FM-1_571"          # package identity: dev FM-1_57100, releases FM-1_571 + XXYYZZ (the 94 prefix belonged to the Blop card)
-usb_manufacturer = "OSR Records"
-usb_product = "Blop FM-1"
+# CHORD RUN build settings (fm1-base tools/build.py)
+name = "chordrun"               # the build's file names: chordrun-1.5.fwsc, build/host/chordrun_host
+title = "CHORD RUN"             # the name people see (firmware hubs)
+id_prefix = "FM-1_571"          # package identity: dev FM-1_57100, releases FM-1_571 + XXYYZZ (not Blop's 94)
+usb_manufacturer = "swtdr34mz"
+usb_product = "CHORD RUN FM-1"   # the USB name (the MIDI port in Ableton)
 o2 = ["dsp/engine.c"]           # the sound engine, at -O2
 include = ["dsp"]
-vendored = ["fm1-base/", "prototype/"]   # fm1-base is a submodule inside the app: its own checks are its own
+vendored = ["fm1-base/"]        # fm1-base is a submodule inside the app: its own checks are its own
 words = "words.tsv"
 font_full = ["L"]               # lower case in the big font: chord names (Am7, Cmaj9, sus4)
 ble = false

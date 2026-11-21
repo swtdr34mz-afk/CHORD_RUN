@@ -30,15 +30,15 @@ Play a song's chords with one finger and a melody over them, while a little runn
 
 | Control | What it does |
 | --- | --- |
-| Black keys | The song's chords. With a rhythm the chord keeps playing (the same key again stops it); without one (HELD) it plays while you hold the key |
+| Black keys | The song's chords. With a rhythm the chord keeps playing (the same key again stops it); without one (HELD) it plays while you hold the key. The black keys right of the song's chords play the melody too: the semitone above the white key to their left (the notes the scale leaves out) |
 | White keys | The melody |
 | SELECT | Song (its own sounds, tempo and drums come with it) |
-| ALGORITHM | Chord rhythm (8): held, quarters, eighths, offbeat, pump, syncopated, tresillo, half-time |
+| ALGORITHM | Chord rhythm (9): held (while you hold the key), FULL (the chord held until you press its key again, with the drums), quarters, eighths, offbeat, pump, syncopated, tresillo, half-time |
 | PRESET | The chords' sound |
 | K1..K4 | The page's four settings (shown at the bottom of the screen) |
 | FX | Delay, tremolo, chorus, reverb |
 | SEL | Chords: key, voicing, BASS NOTE (root, 3rd, 5th, pedal: slash chords), LEVEL. SEL again: CHORDS 2: WIDTH, SPREAD (the chord's voices across the stereo field: diverge, alternate, diverge2, noteval) |
-| ARP | The arpeggiator: MODE (up, down, up-down, random, up / down / up-down over 2 octaves, up over 3), RATE (1/4 to 1/32, triplets too), FLOW (short notes … notes that ring into the next: plucks ring longer, pads blend), SWING. With a chord rhythm (ALGORITHM) the rhythm's steps say which arp notes play; HELD: all of them |
+| ARP | The arpeggiator: MODE (up, down, up-down, random, up / down / up-down over 2 octaves, up over 3), RATE (1/4 to 1/32, triplets too), FLOW (short notes … notes that ring into the next: plucks ring longer, pads blend), SWING. With a chord rhythm (ALGORITHM) the rhythm's steps say which arp notes play; HELD and FULL: all of them |
 | ENV | Groove: BPM, swing, density, sidechain |
 | LFO | Bass: sound, level, riff, filter |
 | EDIT | Melody: cutoff, level, SPACE (a reverb that grows, then echoes), preset. EDIT again: MELODY 2: glide, octave, vibrato, ASSIST (off → CHORD: the chord's notes light up on the beat → GUIDE: a melody made for each song lights up key by key, each hit 2 metres) |

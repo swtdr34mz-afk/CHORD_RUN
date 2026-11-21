@@ -364,7 +364,7 @@ wait 100
 expect missions 5
 expect mission 5
 # mission 6: jam 45 s with drums: a rhythm, the drums on (main page K4), a chord that keeps playing
-turn ALGO 2
+turn ALGO 3
 wait 30
 expect rhythm 2
 turn K4 4
@@ -471,7 +471,7 @@ wait 60
 expect loop 0
 expect loopn 0
 # a loop without a rhythm (HELD): short taps still sound, the stops are kept
-turn ALGO -2
+turn ALGO -3
 wait 30
 expect rhythm 0
 tap REC

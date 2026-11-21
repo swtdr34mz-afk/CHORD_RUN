@@ -6,6 +6,18 @@ key 1 down
 wait 50
 expect mel0 60
 expect mel4 67
+# the black keys right of the chords (LET IT BE has 4: the 5th black key on): melody keys, the semitone above the white key
+# to their left (over C: A B -> Bb, C D -> C#; E F, a semitone apart: F)
+expect kp8 -1
+expect kp10 70
+expect kp13 73
+expect kp17 77
+key 10 down
+wait 30
+expect lead 1
+key 10 up
+wait 30
+expect lead 0
 # ASSIST (MELODY 2, K4): the white keys on the chord's notes (C E G) light up
 tap EDIT
 tap EDIT
@@ -22,7 +34,7 @@ wait 50
 turn K4 1
 wait 50
 expect assist 2
-turn ALGO 2
+turn ALGO 3
 wait 30
 key 1 down
 wait 30
@@ -45,7 +57,7 @@ expect page 0
 key 1 down
 wait 30
 key 1 up
-turn ALGO -2
+turn ALGO -3
 wait 30
 expect active 0
 # BABY ONE MORE TIME (C minor): over Gsus4 the song's own notes (Ab, Bb, Eb); over G the leading tone B (harmonic minor)

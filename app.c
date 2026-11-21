@@ -7,7 +7,8 @@
  *
  * Controls
  *   black keys      the song's chords (left to right, up to 8). With a rhythm the chord keeps playing (latch): the same
- *                   key again stops it; without one (HELD) it plays while the key is down
+ *                   key again stops it; without one (HELD) it plays while the key is down; FULL: held, latched, with the
+ *                   drums. The black keys right of the chords: melody keys, the semitone above the white key to their left
  *   white keys      the melody, in the scale of the chord that played last (its own sound, MELODY page)
  *   SELECT song (its own sounds, tempo and drums come with it)   ALGORITHM chord rhythm   PRESET the chords' sound
  *   K1..K4          the page's four settings, always shown at the bottom of the screen
@@ -91,7 +92,7 @@ static void song_style(void)
     set.bmotif = GRID_DEF[set.grid].bmot;
     set.dpat = GRID_DEF[set.grid].dpat;
     set.bpm = GRID_DEF[set.grid].bpm;
-    if (set.rhythm) set.rhythm = GRID_DEF[set.grid].rhy;
+    if (set.rhythm && set.rhythm != RH_FULL) set.rhythm = GRID_DEF[set.grid].rhy;   /* (FULL stays: the chords held) */
 }
 
 static float glide_s(void) { return set.glide < 1u ? 0.0f : (float)set.glide * 0.015f; }
@@ -246,6 +247,17 @@ static float mel_pitch(int w)
     return (float)p;
 }
 
+/* The black keys right of the song's chords (and the last three, past 8 chords): melody keys too, each the semitone above the
+ * white key to its left, so the notes the white keys leave out (the blue notes, the song's accidentals) are there, where a
+ * piano has them: between the two white keys (where those are a semitone apart, it is the right one's note, as E# is F) */
+static int mel_black(int k)
+{
+    if (!kb_ready) kb_init();
+    return k > 0 && k < NKEYS && kb_white[k] < 0 && kb_white[k - 1] >= 0 && (kb_black[k] < 0 || kb_black[k] >= (int)grid_n[set.grid]);
+}
+static int mel_key(int k) { return (k >= 0 && k < NKEYS && kb_white[k] >= 0) || mel_black(k); }
+static float key_pitch(int k) { return kb_white[k] >= 0 ? mel_pitch(kb_white[k]) : mel_pitch(kb_white[k - 1]) + 1.0f; }
+
 static chord_t slot_chord(int slot, int var, int oct)
 {
     chord_t c;
@@ -390,6 +402,7 @@ static void send_rhythm(void)
     const char *s = RHYTHM_DEF[def].s;
     memset(&r, 0, sizeof r);
     r.hold = s[0] == 0;
+    r.sus = s[0] == '=';
     r.gate = RHYTHM_DEF[def].gate;
     r.swing = RHYTHM_DEF[def].swing;
     r.atk = RHYTHM_DEF[def].atk;
@@ -818,7 +831,12 @@ static void encoder(int k, int32_t e)
         rechord();
         break;
     case EN_ALGO:
-        wrap_u8(&set.rhythm, e, NRHYTHM);
+        {   /* in RHYTHM_ORDER: HELD, FULL, then the patterns */
+            int i, at = 0;
+            for (i = 0; i < NRHYTHM; i++) if (RHYTHM_ORDER[i] == set.rhythm) at = i;
+            at = ((at + (int)(e % NRHYTHM)) % NRHYTHM + NRHYTHM) % NRHYTHM;
+            set.rhythm = RHYTHM_ORDER[at];
+        }
         app_say("RHYTHM", set.rhythm ? RHYTHM_NAME[set.rhythm] : "OFF");
         send_rhythm();
         if (!set.rhythm && held_idx < 0 && active) stop();   /* no rhythm, no latch */
@@ -1340,18 +1358,17 @@ static void input(void)
     if (!kb_ready) kb_init();
     for (k = 0; k < NKEYS; k++) {                               /* the white keys: the melody voice (the last key pressed sounds) */
         uint32_t bit = 1u << k;
-        if (kb_white[k] < 0) continue;
-        if ((keys & bit) && !(ui.keys & bit)) {
-            ld_held |= bit; ld_cur = (int)k; hop_at = now; eng_lead(mel_pitch(kb_white[k]));
+        if ((keys & bit) && !(ui.keys & bit) && mel_key((int)k)) {      /* (a white key, or a black one with no chord) */
+            ld_held |= bit; ld_cur = (int)k; hop_at = now; eng_lead(key_pitch((int)k));
             game_note();
             guide_press((int)k, now);
-        } else if (!(keys & bit) && (ui.keys & bit)) {
+        } else if (!(keys & bit) && (ui.keys & bit) && (ld_held & bit)) {
             ld_held &= ~bit;
             if (ld_cur == (int)k) {
                 int j;
                 ld_cur = -1;
                 for (j = NKEYS - 1; j >= 0; j--) if (ld_held & (1u << j)) { ld_cur = j; break; }
-                if (ld_cur >= 0) eng_lead(mel_pitch(kb_white[ld_cur])); else eng_lead(-1.0f);
+                if (ld_cur >= 0) eng_lead(key_pitch(ld_cur)); else eng_lead(-1.0f);
             }
         }
     }
@@ -1431,7 +1448,7 @@ static void input(void)
     }
     /* lights: the keys glow, the one playing is lit; the page's button, the fun ones that are on, the pressed one */
     lit_keys = valid_keys();
-    for (k = 0; k < NKEYS; k++) if (kb_white[k] >= 0 && ((keys >> k) & 1u)) lit_keys |= 1u << k;   /* a melody key lights while pressed */                                    /* the keys that have a chord glow; a latched chord blinks */
+    for (k = 0; k < NKEYS; k++) if (mel_key((int)k) && ((keys >> k) & 1u)) lit_keys |= 1u << k;   /* a melody key lights while pressed */                                    /* the keys that have a chord glow; a latched chord blinks */
     if (cur_idx >= 0 && held_idx < 0 && (now / 300u) % 2u) lit_keys &= ~(1u << (uint32_t)cur_idx);
     if (set.page != PG_MAIN) lit_btn |= 1u << PAGE_BTN[set.page];
     if (ui.bowl) lit_btn |= 1u << B_SAVE;
@@ -1948,6 +1965,8 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "bsound")) *got = set.bsound;
     else if (!strcmp(what, "reverb")) *got = set.reverb;
     else if (!strncmp(what, "mel", 3) && what[3] >= '0' && what[3] <= '9') *got = (int)mel_pitch(atoi(what + 3));   /* a white key's note now */
+    else if (!strncmp(what, "kp", 2) && what[2] >= '0' && what[2] <= '9')    /* a key's melody note now (-1: a chord key) */
+        *got = mel_key(atoi(what + 2)) ? (int)key_pitch(atoi(what + 2)) : -1;
     else if (!strcmp(what, "loop")) *got = lp.st;
     else if (!strcmp(what, "assist")) *got = set.assist;
     else if (!strcmp(what, "carp")) *got = set.carp;

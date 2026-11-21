@@ -70,9 +70,13 @@ static const sound_t SOUNDS[NSOUND] = {
  * KALIMBA, E-PIANO, GRAND KEYS and SUPERSAW are left out: they are for the chords only */
 static const uint8_t MEL_PRESET[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 21, 22, 23, 24};
 #define NMEL_PRESET ((int)(sizeof MEL_PRESET / sizeof MEL_PRESET[0]))
-#define NRHYTHM 8
-static const char *const RHYTHM_NAME[NRHYTHM] = {"HELD", "QUARTERS", "EIGHTHS", "OFFBEAT", "PUMP", "SYNCOPATED", "TRESILLO", "HALF-TIME"};
-/* 16 steps: X accent, x soft, - tie, . rest ("" = held) */
+#define NRHYTHM 9
+#define RH_FULL 8                        /* FULL: the chord held and latched, the drums and the bass on */
+static const char *const RHYTHM_NAME[NRHYTHM] = {"HELD", "QUARTERS", "EIGHTHS", "OFFBEAT", "PUMP", "SYNCOPATED", "TRESILLO", "HALF-TIME",
+                                                 "FULL"};
+/* the order ALGORITHM turns through them (FULL came last, so the saved settings and the songs keep their numbers) */
+static const uint8_t RHYTHM_ORDER[NRHYTHM] = {0, RH_FULL, 1, 2, 3, 4, 5, 6, 7};
+/* 16 steps: X accent, x soft, - tie, . rest ("" = held while the key is down; "=" = FULL: held until the key again) */
 static const struct { const char *s; float gate, swing, atk; } RHYTHM_DEF[NRHYTHM] = {
     {"", 0.0f, 0.0f, 0.0f},
     {"X---x---X---x---", 0.85f, 0.0f, 0.0f},
@@ -82,6 +86,7 @@ static const struct { const char *s; float gate, swing, atk; } RHYTHM_DEF[NRHYTH
     {"X..x..x...x..x..", 0.4f, 0.0f, 0.0f},
     {"X--x--x-X--x--x-", 0.7f, 0.0f, 0.0f},
     {"X-------x-----x-", 0.9f, 0.0f, 0.0f},
+    {"=", 0.0f, 0.0f, 0.0f},
 };
 #define NGRID 17
 /* chord SETS: the chords of a song, one per BLACK key from the left (up to 8 of them); the white keys play a melody in the

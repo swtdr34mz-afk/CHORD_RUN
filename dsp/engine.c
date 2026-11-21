@@ -501,6 +501,9 @@ static void midi_retarget(void)
     (void)n;
 }
 
+/* the chord held, not played by a rhythm's steps: rhythm OFF (hold), or FULL (sus: held while the transport, the drums
+ * and the bass run on) */
+#define RH_HELD (E.rh.hold || E.rh.sus)
 static void hit(float vel, float gate_s, float atk)
 {
     const sound_t *p = &E.p;
@@ -514,9 +517,9 @@ static void hit(float vel, float gate_s, float atk)
     E.stage = 1;
     E.gate_left = gate_s;
     if (atk <= 0.0f)
-        atk = E.rh.hold ? p->atk : fm_minf(p->atk, 0.012f);   /* in a rhythm, attacks stay short */
+        atk = RH_HELD ? p->atk : fm_minf(p->atk, 0.012f);   /* in a rhythm, attacks stay short */
     E.atk_s = fm_maxf(0.003f * SR, atk * SR);   /* never a step: at least 3 ms */
-    E.rel_s = (E.rh.hold ? p->rel : fm_minf(p->rel, 0.3f)) * SR;
+    E.rel_s = (RH_HELD ? p->rel : fm_minf(p->rel, 0.3f)) * SR;
     E.fenv = 1.0f;
     E.ienv = 1.0f;
     if (E.bmotif == MOTIF_SUIT || E.bmotif == MOTIF_TENUE) E.bfenv = 1.0f;
@@ -585,7 +588,7 @@ static void arp_fire(float period)
     int oct = E.arp == ARP_UP3 ? 3 : E.arp >= ARP_UP2 ? 2 : 1, total = 4 * oct, idx, v, i;
     float vel = 1.0f, pitch, tau;
     uint32_t k;
-    if (!E.rh.hold) {                           /* a rhythm: its steps say which notes play (the step this note falls in) */
+    if (!RH_HELD) {                             /* a rhythm: its steps say which notes play (the step this note falls in) */
         int st = E.step_left < 2.0f ? E.step & 15 : (E.last_step >= 0 ? E.last_step & 15 : 0);
         vel = E.rh_cov[st];
         if (vel <= 0.0f) return;
@@ -655,7 +658,7 @@ static void on_step(void)
             if (E.arp_per > 0.0f && E.arp_left > E.arp_per - 8.0f) E.arp_n = 1;   /* it just played the bar's first note */
             else { E.arp_left = 0.0f; E.arp_n = 0; }
         }
-    } else if (E.active && !E.rh.hold) {
+    } else if (E.active && !RH_HELD) {
         float v = E.rh.v[i];
         int nlen = E.rh.len[i];
         if (v > 0.0f && E.dens < 0.0f && i != 0 && rndu() < -E.dens * 0.75f) v = 0.0f;      /* fewer hits */
@@ -702,7 +705,7 @@ static void chord_cmd(const float *notes, float bass, float glide)
         E.fade_left = 0.0f;
         E.pending = 0;
         E.arp_k = 0; E.arp_per = 0.0f; E.arp_left = 0.0f;
-        if (E.rh.hold && !E.arp) hit(1.0f, 1e9f, 0.0f);
+        if (RH_HELD && !E.arp) hit(1.0f, 1e9f, 0.0f);
         if (E.bmotif == MOTIF_TENUE) bass_hit(1e9f, 0);
         check_run();
         return;
@@ -736,7 +739,7 @@ static void run_commands(void)
                             E.rh_cov[i2 + j] = E.rh.v[i2] * (j ? 0.85f : 1.0f);
             }
             if (E.active && !E.arp) {
-                if (E.rh.hold) hit(1.0f, 1e9f, 0.0f);
+                if (RH_HELD) hit(1.0f, 1e9f, 0.0f);
                 else E.gate_left = 0.0f;
             }
             check_run();
@@ -801,7 +804,7 @@ static void run_commands(void)
             E.spread = c->u.cf.spread < NSPREAD ? c->u.cf.spread : 0;
             E.aflow = c->u.cf.flow; E.aswing = c->u.cf.swing; E.width = c->u.cf.width; E.clev = c->u.cf.level;
             if (E.active && was != E.arp) {         /* the arpeggiator on / off while a chord plays */
-                if (!E.arp && E.rh.hold) hit(1.0f, 1e9f, 0.0f);
+                if (!E.arp && RH_HELD) hit(1.0f, 1e9f, 0.0f);
                 check_run();
             }
             break;

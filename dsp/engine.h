@@ -27,6 +27,7 @@ typedef struct {
 
 typedef struct {
     uint8_t hold;                      /* 1: the chord is held (no pattern) */
+    uint8_t sus;                       /* 1: FULL: the chord is held as with hold, but the transport (drums, bass) runs */
     float v[16];                       /* step velocity (0 = rest) */
     uint8_t len[16];                   /* steps the note lasts (ties) */
     float gate, swing, atk;

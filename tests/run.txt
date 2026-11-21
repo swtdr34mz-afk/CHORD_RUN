@@ -443,15 +443,27 @@ wait 300
 expect lead 1
 key 7 up
 wait 100
-# REC: paused (silence), REC: again from its start, REC held 1 s: gone
-tap REC
+# PLAY / STOP: stopped (silence, the loop kept), PLAY: again from its start
+tap PLAY
 wait 60
 expect loop 4
 expect active 0
-tap REC
+shot loop_stopped.png
+tap PLAY
 wait 300
 expect loop 3
 expect chord 1
+# REC with a loop: ready for a new one; PLAY instead: the old one plays on (nothing lost)
+tap REC
+wait 60
+expect loop 1
+expect active 0
+tap PLAY
+wait 300
+expect loop 3
+expect loopn 4
+expect chord 1
+# REC held 1 s: gone
 press REC
 wait 1200
 release REC

@@ -179,20 +179,17 @@ expect page 5
 tap HOME
 wait 30
 expect page 0
-# the bottom row: SAVE (the music muffled), PLAY (no info), SEQ (the next character)
+# the bottom row: SAVE (the music muffled), PLAY (the loop), SEQ (the next character)
 tap SAVE
 wait 900
 expect bowl 1
 tap SAVE
 wait 600
 expect bowl 0
+# PLAY / STOP without a loop: nothing to play (a message)
 tap PLAY
-wait 600
-expect clean 1
-shot clean.png
-tap PLAY
-wait 30
-expect clean 0
+wait 60
+expect loop 0
 tap SEQ
 wait 300
 expect character 1

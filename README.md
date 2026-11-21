@@ -18,7 +18,8 @@ Play a song's chords with one finger and a melody over them, while a little runn
   brass, supersaw, pocket lead, an Oberheim-ish brass pad and brass lead).
 - **Drums:** twelve styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
   dreamcore, angelcore, hip hop and 80s pop (808s, metal hi-hats with rolls, claps, cowbell, washed snares).
-- **Loop:** press REC, play 4 bars of chords, and they play round while you play the melody on top.
+- **Loop:** press REC, play 4 bars of chords, and they play round while you play the melody on top. PLAY / STOP stops
+  and restarts it.
 - **The run:** the runner runs while you play. The metres add up, the best run is kept, ten characters unlock, and
   there is always a mission (play 24 chords, run 120 m at once, record a loop...) that gives extra metres.
 
@@ -40,10 +41,10 @@ Play a song's chords with one finger and a melody over them, while a little runn
 | EDIT | Melody: cutoff, level, SPACE (a reverb that grows, then echoes), preset. EDIT again: MELODY 2: glide, octave, vibrato, ASSIST (off → CHORD: the chord's notes light up on the beat → GUIDE: a melody made for each song lights up key by key, each hit 2 metres) |
 | GLO | Drums: style, kick, hats, snare |
 | HOME | Back to the main page. Held: the title and your progress |
-| REC | The loop: ready → the first chord records 4 bars → it plays. Again: pause / play. Held 1 s: cleared |
+| REC | The loop: ready → the first chord records 4 bars → it plays round. While recording: closes it. With a loop kept: ready for a new one (PLAY instead keeps the old one). Held 1 s: cleared |
 | SEQ | The next character (the unlocked ones) |
 | SAVE | The music heard from outside the room |
-| PLAY | Hide the info |
+| PLAY | Stops the loop and starts it again from its start (the loop is kept); the header shows its bars |
 | OCT- / OCT+ | Octave |
 | HOME + REC held 3 s | Back to the first-start settings (your progress stays) |
 

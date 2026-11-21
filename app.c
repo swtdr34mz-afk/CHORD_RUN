@@ -26,9 +26,9 @@
  *                   GLO   drums: style (each with its own kit), kick, hats, snare
  *   bottom row      HOME  back to the main page (held: the title and the player's progress)
  *                   SAVE  the music heard from outside the room
- *                   SEQ   the next character (the unlocked ones)   PLAY  hide the info
- *                   REC   the loop: ready, the first chord records 4 bars, then it plays round; REC again: close /
- *                         pause / play; held 1 s: gone
+ *                   SEQ   the next character (the unlocked ones)   PLAY  the loop: stop / start again from its start
+ *                   REC   the loop: ready, the first chord records 4 bars, then it plays round; REC while recording:
+ *                         close; with a loop kept: ready for a new one (PLAY: the old one again); held 1 s: gone
  *   OCT- / OCT+ octave.   HOME + REC held 3 s: back to the first-start settings (a countdown; the progress stays).
  *   Settings save themselves a few seconds after the last change, the progress after a few quiet seconds. */
 #include "fastmath.h"
@@ -691,9 +691,8 @@ static struct {
     uint8_t help, help_drawn, home_long;
     uint32_t reset_at;                   /* HOME + REC held since (0: not) */
     uint8_t reset_shown, reset_done;
-    uint8_t bowl, clean;                 /* the music heard from outside the room (SAVE), no info on the screen (PLAY) */
+    uint8_t bowl;                        /* the music heard from outside the room (SAVE) */
 } ui;
-static void fun(int k);                  /* the bottom row (screen part) */
 
 static void int_text(int32_t v, char *b)
 {
@@ -968,15 +967,16 @@ static void game_note(void)
     if (run.mtype == MS_NOTES) { run.mprog += 1.0f; mission_check(); }
 }
 
-/* ------------------------------------------------------------------ the loop (REC) --- */
+/* ------------------------------------------------------------------ the loop (REC, PLAY) --- */
 /* REC: ready; the first chord starts the recording, 4 bars (of the tempo), then it plays round and round (the chord changes,
- * as played), and the melody is yours to play over it. REC again: while recording, the loop closes at the bar; while playing,
- * a pause; paused, it plays again from its start. REC held 1 s: the loop is gone. */
+ * as played), and the melody is yours to play over it. PLAY / STOP: the loop stops, and starts again from its start (the
+ * loop stays). REC while recording: the loop closes at the bar; REC with a loop kept: ready for a new one (the old one plays
+ * again with PLAY until a chord starts the new recording; REC again: not). REC held 1 s: the loop is gone. */
 enum { LP_OFF, LP_READY, LP_REC, LP_PLAY, LP_PAUSE };
 #define LP_MAX 96
 #define LP_BARS 4
 static struct {
-    uint8_t st, firing, held_done;
+    uint8_t st, firing, held_done, has;         /* has: a loop is kept (to play with PLAY) */
     uint16_t n, len;                            /* events, the loop's length in steps (16 a bar) */
     struct { uint16_t step; int8_t key; } ev[LP_MAX];
     uint32_t t0, rec_down;                      /* the recording's / the round's start (ms), REC pressed at */
@@ -1017,6 +1017,7 @@ static void lp_close(uint32_t now)
     lp.t0 += (uint32_t)((float)lp.len * sm);    /* the next round starts where the recording's bars end */
     lp.last = -1;
     lp.st = LP_PLAY;
+    lp.has = 1;
     app_say("LOOP", "PLAYING - PLAY ON TOP");
     if (run.mtype == MS_LOOP) { run.mprog = 1.0f; mission_check(); }
 }
@@ -1041,17 +1042,35 @@ static void lp_tick(uint32_t now)
     run.busy_at = now;
 }
 
-/* REC: a tap (on release) moves the loop on; held 1 s, it is gone */
+static void lp_silence(void) { lp.firing = 1; if (active) stop(); lp.firing = 0; }
+static void lp_start(uint32_t now) { lp.st = LP_PLAY; lp.t0 = now; lp.last = -1; app_say("LOOP", "PLAYING - PLAY ON TOP"); }
+
+/* REC: a tap (on release); held 1 s, the loop is gone (lp_hold) */
 static void lp_button(int down, uint32_t now)
 {
     if (down) { lp.rec_down = now; lp.held_done = 0; return; }
     if (lp.held_done) return;
     switch (lp.st) {
-    case LP_OFF: lp.st = LP_READY; app_say("LOOP", "PLAY A CHORD TO RECORD"); break;
-    case LP_READY: lp.st = LP_OFF; app_say("LOOP", "OFF"); break;
+    case LP_PLAY: lp_silence(); /* fall through */
+    case LP_OFF: case LP_PAUSE:
+        lp.st = LP_READY;
+        app_say("REC", lp.has ? "PLAY A CHORD: A NEW LOOP" : "PLAY A CHORD: 4 BARS");
+        break;
+    case LP_READY: lp.st = lp.has ? LP_PAUSE : LP_OFF; app_say("REC", "CANCELLED"); break;
+    default: lp_close(now); break;                /* recording: the loop closes at the bar */
+    }
+}
+/* PLAY / STOP: the loop stops, or starts from its start */
+static void lp_play_button(uint32_t now)
+{
+    switch (lp.st) {
+    case LP_PLAY: lp_silence(); lp.st = LP_PAUSE; app_say("LOOP", "STOPPED - PLAY STARTS IT"); break;
     case LP_REC: lp_close(now); break;
-    case LP_PLAY: lp.st = LP_PAUSE; lp.firing = 1; if (active) stop(); lp.firing = 0; app_say("LOOP", "PAUSED"); break;
-    default: lp.st = LP_PLAY; lp.t0 = now; lp.last = -1; app_say("LOOP", "PLAYING"); break;
+    case LP_PAUSE: lp_start(now); break;
+    default:
+        if (lp.has) lp_start(now);
+        else app_say("LOOP", "NONE YET - PRESS REC");
+        break;
     }
 }
 static void lp_hold(uint32_t now)
@@ -1059,7 +1078,7 @@ static void lp_hold(uint32_t now)
     if (lp.held_done || lp.st == LP_OFF || now - lp.rec_down < 1000u) return;
     lp.held_done = 1;
     if (lp.st == LP_PLAY && active) { lp.firing = 1; stop(); lp.firing = 0; }
-    lp.st = LP_OFF; lp.n = 0;
+    lp.st = LP_OFF; lp.n = 0; lp.has = 0;
     app_say("LOOP", "CLEARED");
 }
 
@@ -1153,7 +1172,7 @@ static void button(int k)
         hop_at = plat_ms();
         break;
     }
-    case B_PLAY: fun(k); return;
+    case B_PLAY: lp_play_button(plat_ms()); return;   /* PLAY / STOP: the loop */
     case B_OCTDN:
     case B_OCTUP:
         set.octave = (int8_t)clamp(set.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
@@ -1362,7 +1381,7 @@ static void input(void)
             if (active) stop();
             settings_defaults();
             set.page = page;
-            ui.bowl = ui.clean = 0;
+            ui.bowl = 0;
             eng_muffle(0.0f);
             send_sound(); send_rhythm(); send_groove(); send_cfx(); send_drums(); send_bass(); send_fx(); send_params();
             dirty();
@@ -1408,7 +1427,7 @@ static void input(void)
     if (ui.bowl) lit_btn |= 1u << B_SAVE;
     if (lp.st == LP_PLAY || ((lp.st == LP_REC || lp.st == LP_READY) && (now / (lp.st == LP_REC ? 200u : 500u)) % 2u))
         lit_btn |= 1u << B_REC;
-    if (ui.clean) lit_btn |= LED_PLAY_GREEN;
+    if (lp.st == LP_PLAY) lit_btn |= (1u << B_PLAY) | LED_PLAY_GREEN;   /* the loop plays */
     /* ASSIST: while a chord plays, the white keys on its notes light up, fully on each beat's first half, softer after */
     if (set.assist == 2) {                      /* GUIDE: the key to play, the next one softly */
         if (gd.key >= 0) lit_keys |= 1u << (uint32_t)gd.key;
@@ -1452,11 +1471,6 @@ static struct {
 
 static void scene_init(void) { memset(&sc, 0, sizeof sc); }
 
-/* ---- the bottom row: PLAY hides the info */
-static void fun(int k)
-{
-    if (k == B_PLAY) ui.clean ^= 1u;
-}
 
 /* ---- once a frame: the intro at the start (3 s, then it fades), and while HOME is held */
 static void scene_step(uint32_t now, float dt)
@@ -1799,12 +1813,14 @@ static void draw_screen(int bottom)
         t[0] = 0; text_cat(t, "GUIDE  HITS "); int_text((int32_t)gd.hits, b); text_cat(t, b);
         cv_text(232 - text_w(&FONT_T, t), 11, &FONT_T, t, ACC1);
     }
-    if (lp.st != LP_OFF) {   /* the loop: its state at the right, under the key; its round as a bar on the line */
-        uint16_t lc = lp.st == LP_REC ? ACC2 : lp.st == LP_PLAY ? ACC1 : L;
+    if (lp.st != LP_OFF) {   /* the loop: its state at the right, under the key; its bars on the line, the one playing filling */
+        uint16_t lc = lp.st == LP_REC || lp.st == LP_READY ? ACC2 : lp.st == LP_PLAY ? ACC1 : L;
         float pos = 0.0f;
+        int nb = lp.st == LP_REC || (lp.st == LP_READY && !lp.has) ? LP_BARS : lp.len / 16, bi;
+        int32_t sw;
         t[0] = 0;
-        if (lp.st == LP_READY) text_cat(t, (now / 500u) % 2u ? "LOOP READY" : "");
-        else if (lp.st == LP_PAUSE) text_cat(t, "LOOP PAUSED");
+        if (lp.st == LP_READY) text_cat(t, (now / 500u) % 2u ? "REC READY: PLAY A CHORD" : "");
+        else if (lp.st == LP_PAUSE) text_cat(t, "LOOP STOPPED: PRESS PLAY");
         else {
             int32_t el = (int32_t)(now - lp.t0);
             float stp = step_ms();
@@ -1815,7 +1831,15 @@ static void draw_screen(int bottom)
             text_cat(t, "/"); int_text(lp.len / 16, b); text_cat(t, b);
         }
         if (t[0]) cv_text(232 - text_w(&FONT_T, t), 11, &FONT_T, t, lc);
-        if (lp.st == LP_REC || lp.st == LP_PLAY) cv_rect(8, 22, (int32_t)(224.0f * pos), 1, lc);
+        if (nb < 1) nb = 1;
+        sw = (224 - (nb - 1) * 3) / nb;
+        for (bi = 0; bi < nb; bi++) {           /* the bars: dim, filled as they play */
+            float f = pos * (float)nb - (float)bi;
+            int32_t bx = 8 + bi * (sw + 3);
+            f = f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f;
+            cv_rect(bx, 21, sw, 3, lp.st == LP_PAUSE ? RGB(60, 74, 80) : RGB(26, 40, 46));
+            if (f > 0.0f) cv_rect(bx, 21, (int32_t)((float)sw * f), 3, lc);
+        }
     }
     for (i = 0; i < n; i++) {
         int one = n <= 4, sel = i == cs;
@@ -1881,7 +1905,7 @@ void app_frame(void)
             else neon_splash(0);
             cv_blit(0, 0);
             cv_begin(240, 120, 0);
-            if (over) { draw_screen(1); if (!ui.clean) draw_bottom_text(); }
+            if (over) { draw_screen(1); draw_bottom_text(); }
             else neon_splash(1);
             cv_blit(0, 120);
         }
@@ -1909,7 +1933,6 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "drums")) *got = set.drums;
     else if (!strcmp(what, "help")) *got = ui.help;
     else if (!strcmp(what, "bowl")) *got = ui.bowl;
-    else if (!strcmp(what, "clean")) *got = ui.clean;
     else if (!strcmp(what, "cutoff")) *got = set.cutoff;
     else if (!strcmp(what, "delay")) *got = set.delay;
     else if (!strcmp(what, "bsound")) *got = set.bsound;

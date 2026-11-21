@@ -1,4 +1,8 @@
-# Crédits
+# Crédits / Credits
+
+CHORD RUN by swtdr34mz, based on OSR-1 / Blop by Obsimo (OSR Records), under GPL-3.0-only.
+CHORD RUN's own parts: the song sets and their sounds, the melody voice, the eight added sounds (NYLON PLUCK .. POCKET
+LEAD), the drum styles and kits, the runner, missions and loop, the 2027 screens.
 
 OSR-1 par Obsimo (OSR Records), sous GPL-3.0-only.
 

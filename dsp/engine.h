@@ -35,12 +35,16 @@ typedef struct {
 typedef struct {                       /* a drum kit's sound */
     float k_base, k_sweep, k_pdec, k_dec, k_drive;   /* kick: Hz, Hz added at the hit, its pitch drop (s), body (s) */
     float h_tone, h_closed, h_open;                  /* hi-hat: 0 dark .. 1 bright, decays (s) */
-    float r_f1, r_f2, r_dec, r_noise;                /* rim: two tones (Hz), decay (s), click */
+    float r_f1, r_f2, r_dec, r_noise;                /* perc: two tones (Hz), decay (s), click (rim, clave, cowbell) */
+    float s_tone, s_body, s_dec, s_snap, s_clap;     /* snare: body Hz, body amount 0..1, noise decay (s), brightness
+                                                        0..1, clap (0 a snare, 1 three quick bursts) */
+    float space;                                     /* how much of the hats, snare and perc go to the reverb */
 } kit_t;
 
 typedef struct {                       /* a drum pattern: velocities per step (0 = rest), and its kit */
-    float k[16], h[16], r[16];
+    float k[16], h[16], s[16], r[16];  /* kick, hi-hat, snare / clap, perc */
     uint8_t open[16];                  /* the hi-hat rings longer on these steps */
+    uint8_t roll[16];                  /* hi-hat rolls: hits in the step (0 / 1 one, 2, 3, 4) */
     kit_t kit;
 } drums_t;
 
@@ -55,7 +59,8 @@ void eng_rhythm(const rhythm_t *r);
 void eng_chord(const float notes[4], float bass, float glide_s);
 void eng_stop(void);
 void eng_lead_sound(const sound_t *p);                      /* the melody voice's own sound */
-void eng_lead_params(float cut_hz, float level, float reverb);   /* its cutoff (Hz), level (1 = as the sound), reverb send 0..1 */
+void eng_lead_params(float cut_hz, float level, float reverb, float delay);   /* its cutoff (Hz), level (1 = as the sound),
+                                                                               reverb and echo sends 0..1 */
 void eng_lead(float m);               /* the melody voice: a MIDI pitch = note on, negative = release */
 /* an outside MIDI clock's beat: the even step STEP (0..15) began at AT_MS (plat_ms); STEP -1: the clock is gone */
 void eng_sync(int step, uint32_t at_ms);
@@ -69,7 +74,7 @@ void eng_muffle(float m);
 void eng_blip(int kind);
 /* swing 0..1, density -1..1 (fewer / more hits), gate 0..1 (0.5 = as written), strum 0..1 */
 void eng_groove(float swing, float density, float gate, float strum);
-void eng_drums(const drums_t *d, float kick, float hat, float rim);
+void eng_drums(const drums_t *d, float kick, float hat, float snare);   /* snare: the snare and the perc */
 void eng_bass(int sound, int motif, float level, float cut);
 void eng_panic(void);
 void eng_render(int32_t *lr, uint32_t n, float gain);

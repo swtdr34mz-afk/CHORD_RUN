@@ -1,35 +1,38 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 Obsimo (OSR Records) */
-/* BLOP (by Obsimo) app: input, pages, chord grids, the aquarium screen, settings. Part of the unity build (device/unity.c,
- * host/plat_host.c), after the platform: gfx.c and announce.c are in scope. The sound is dsp/engine.c.
+ * Copyright (C) 2026 Obsimo (OSR Records)
+ * Copyright (C) 2026 swtdr34mz (CHORD RUN: the song sets, the melody, the runner, missions, the loop) */
+/* CHORD RUN (based on BLOP by Obsimo): input, pages, the song sets, the melody, the runner and its missions, the loop,
+ * the screen, settings. Part of the unity build (device/unity.c, host/plat_host.c), after the platform: gfx.c and announce.c
+ * are in scope. The sound is dsp/engine.c.
  *
  * Controls
- *   all 27 keys     chords of the grid (same note name, same chord; C5 = the grid's 8th chord),
- *                   white keys safe, black keys spices; below C4 an octave down, above C5 an octave up.
- *                   With a rhythm the chord keeps playing (latch): the same key again stops it.
- *   SELECT grid   ALGORITHM rhythm (OFF = the chord held, only while the key is down)   PRESET sound
+ *   black keys      the song's chords (left to right, up to 8). With a rhythm the chord keeps playing (latch): the same
+ *                   key again stops it; without one (HELD) it plays while the key is down
+ *   white keys      the melody, in the scale of the chord that played last (its own sound, MELODY page)
+ *   SELECT song (its own sounds, tempo and drums come with it)   ALGORITHM chord rhythm   PRESET the chords' sound
  *   K1..K4          the page's four settings, always shown at the bottom of the screen
  *   top row: page buttons (the same button again: back to the main page)
  *                   main  cutoff, glide, note length, drums (level; 0 = no drums)
  *                   FX    delay, tremolo, chorus, reverb
  *                   SCL   chords: key, voicing, richness, strum
  *                   ENV   groove: BPM, swing, density, sidechain on/off
- *                   LFO   bass: sound, level, motif, filter
- *                   EDIT  decor: creature, eyes, background, accessory
- *                   GLO   drums: pattern (each with its own kit), kick, hi-hat, rim
- *   bottom row      HOME  back to the main page (held: the title, BLOP by Obsimo)
- *                   SAVE  step back: the creature in its bowl, the music heard from outside the room
- *                   ARP   the aquarium's light   SEQ  a pirouette   PLAY  hide the info (just the picture)
- *                   REC   feed it
- *   OCT- / OCT+ octave.   HOME + REC held 3 s: back to the first-start settings (a countdown).
- *   Settings save themselves a few seconds after the last change. */
+ *                   LFO   bass: sound, level, riff, filter
+ *                   EDIT  melody: cutoff, level, space (reverb, then echoes), preset
+ *                   GLO   drums: style (each with its own kit), kick, hats, snare
+ *   bottom row      HOME  back to the main page (held: the title and the player's progress)
+ *                   SAVE  the music heard from outside the room
+ *                   SEQ   the next character (the unlocked ones)   PLAY  hide the info
+ *                   REC   the loop: ready, the first chord records 4 bars, then it plays round; REC again: close /
+ *                         pause / play; held 1 s: gone
+ *   OCT- / OCT+ octave.   HOME + REC held 3 s: back to the first-start settings (a countdown; the progress stays).
+ *   Settings save themselves a few seconds after the last change, the progress after a few quiet seconds. */
 #include "fastmath.h"
 #include "engine.h"
 #include "data.h"
 #include "patterns.h"
 
 /* ------------------------------------------------------------------ settings --- */
-#define SET_MAGIC 0x4F535236u            /* "OSR6" (v6: bass 80 %, 2-STEP first) */
+#define SET_MAGIC 0x4F535237u            /* "OSR7" (v7, CHORD RUN: 21 sounds, 8 rhythms, 10 drum styles, the song's own sound) */
 typedef struct {
     uint32_t magic;
     uint8_t grid, key, rich, voicing;
@@ -42,13 +45,14 @@ typedef struct {
     uint8_t dpat, dkick, dhat, drim;            /* drums */
     uint8_t bsound, blevel, bmotif, bcut;       /* bass */
     uint8_t creature, eyes, decor, acc;         /* decor (the creature screen; no page for it for now) */
-    uint8_t mcut, mlev, mrev, msound;           /* melody: cutoff, level, reverb, preset (0 = as the chords) */
+    uint8_t mcut, mlev, mrev, msound;           /* melody: cutoff, level, space (reverb, then echoes), preset (0 = as the chords) */
     uint8_t rsv[3];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
 static uint32_t dirty_at;             /* when the settings last changed (auto-save)*/
 
+static void song_style(void);
 static void settings_defaults(void)
 {
     memset(&set, 0, sizeof set);
@@ -61,6 +65,21 @@ static void settings_defaults(void)
     set.bsound = BASS_ROND; set.blevel = 80; set.bmotif = MOTIF_SUIT; set.bcut = 45;
     set.creature = 0; set.eyes = 0; set.decor = 0; set.acc = 0;
     set.mcut = 50; set.mlev = 80; set.mrev = 30; set.msound = 0;
+    song_style();
+}
+
+/* a song's own sound (data.h GRID_DEF): chords, melody, bass, tempo, drums; its chord rhythm only when a rhythm plays */
+static void song_style(void)
+{
+    set.key = GRID_DEF[set.grid].key;
+    set.rich = GRID_DEF[set.grid].rich;
+    set.sound = GRID_DEF[set.grid].snd;
+    set.msound = GRID_DEF[set.grid].msnd;
+    set.bsound = GRID_DEF[set.grid].bsnd;
+    set.bmotif = GRID_DEF[set.grid].bmot;
+    set.dpat = GRID_DEF[set.grid].dpat;
+    set.bpm = GRID_DEF[set.grid].bpm;
+    if (set.rhythm) set.rhythm = GRID_DEF[set.grid].rhy;
 }
 
 static float glide_s(void) { return set.glide < 1u ? 0.0f : (float)set.glide * 0.015f; }
@@ -307,12 +326,15 @@ static void spread(float *n, int mode)   /* SERRE as is, OUVERT drop 2, LARGE dr
 }
 
 /* ------------------------------------------------------------------ engine links --- */
-/* the melody voice (white keys): its preset (0 = the chords' sound), cutoff (50 = as the sound is made), level, reverb */
+/* the melody voice (white keys): its preset (0 = the chords' sound), cutoff (50 = as the sound is made), level, and SPACE,
+ * one knob for a few effects: up to 40 % a reverb that grows (a light tail), then echoes (the ping-pong delay, in time) join
+ * in and the reverb grows on to big and airy */
 static void send_lead(void)
 {
-    float hz = 70.0f * fm_powf(12000.0f / 70.0f, (float)set.mcut * 0.01f);
+    float hz = 70.0f * fm_powf(12000.0f / 70.0f, (float)set.mcut * 0.01f), sp = (float)set.mrev * 0.01f;
+    float rev = fm_minf(1.0f, sp * 1.35f), del = sp <= 0.4f ? 0.0f : (sp - 0.4f) * (0.5f / 0.6f);
     eng_lead_sound(set.msound ? &SOUNDS[set.msound - 1] : &SOUNDS[set.sound]);
-    eng_lead_params(hz, (float)set.mlev * 0.0125f, (float)set.mrev * 0.01f);
+    eng_lead_params(hz, (float)set.mlev * 0.0125f, rev, del);
 }
 static void send_sound(void) { eng_sound(&SOUNDS[set.sound]); send_lead(); }
 static void send_rhythm(void)
@@ -423,16 +445,19 @@ static void send_groove(void)
     eng_groove((float)set.swing * 0.01f, ((float)set.dens - 50.0f) * 0.02f, (float)set.gate * 0.01f,
                (float)set.strum * 0.01f);
 }
-static float drum_v(char c) { return c == 'X' ? 1.0f : (c == 'x' || c == 'o') ? 0.6f : 0.0f; }
+static float drum_v(char c) { return c == 'X' ? 1.0f : (c == 'x' || c == 'o' || (c >= '2' && c <= '4')) ? 0.6f : 0.0f; }
 static void send_drums(void)
 {
     drums_t d;
     int i;
     for (i = 0; i < 16; i++) {
+        char hc = DRUM_DEF[set.dpat].h[i];
         d.k[i] = drum_v(DRUM_DEF[set.dpat].k[i]);
-        d.h[i] = drum_v(DRUM_DEF[set.dpat].h[i]);
+        d.h[i] = drum_v(hc);
+        d.s[i] = drum_v(DRUM_DEF[set.dpat].s[i]);
         d.r[i] = drum_v(DRUM_DEF[set.dpat].r[i]);
-        d.open[i] = DRUM_DEF[set.dpat].h[i] == 'o';
+        d.open[i] = hc == 'o';
+        d.roll[i] = (uint8_t)(hc >= '2' && hc <= '4' ? hc - '0' : 0);
     }
     d.kit = DRUM_KIT[set.dpat];
     {   /* the main page's DRUMS is the kit's master level */
@@ -511,7 +536,7 @@ typedef struct {
     uint8_t lo, hi, kind, grp;
     const char *const *names;
 } kdef_t;
-static const char *const MSOUND_NAME[NSOUND + 1] = {"AS CHORDS", "PAPER STRINGS", "STILL WATER", "SOFT HORIZON", "VELVET TAPE", "AIR AND SALT", "LOW CLOUD", "AIRFIELD", "SLOW BLOOM", "GLASS TIDE", "DUST PLUCK", "MOON KEYS", "SINE DROPS", "NIGHT SIGNAL"};
+static const char *msound_name[NSOUND + 1];    /* "AS CHORDS", then the sounds (app_init) */
 static const kdef_t KD[NPAGE][4] = {
     {{"CUTOFF", &set.cutoff, 0, 100, KD_PCT, G_PARAMS, 0}, {"GLIDE", &set.glide, 0, 100, KD_GLIDE, G_NONE, 0},
      {"LENGTH", &set.gate, 0, 100, KD_PCT, G_GROOVE, 0}, {"DRUMS", &set.drums, 0, 100, KD_OFF, G_DRUMLVL, 0}},
@@ -524,9 +549,9 @@ static const kdef_t KD[NPAGE][4] = {
     {{"SOUND", &set.bsound, 0, NBASS_SOUND - 1, KD_LIST, G_BASS, BASS_NAME}, {"LEVEL", &set.blevel, 0, 100, KD_PCT, G_BASS, 0},
      {"RIFF", &set.bmotif, 0, NMOTIF - 1, KD_LIST, G_BASS, MOTIF_NAME}, {"FILTER", &set.bcut, 0, 100, KD_PCT, G_BASS, 0}},
     {{"CUTOFF", &set.mcut, 0, 100, KD_PCT, G_MELODY, 0}, {"LEVEL", &set.mlev, 0, 100, KD_PCT, G_MELODY, 0},
-     {"REVERB", &set.mrev, 0, 100, KD_PCT, G_MELODY, 0}, {"PRESET", &set.msound, 0, NSOUND, KD_LIST, G_MELODY, MSOUND_NAME}},
-    {{"PATTERN", &set.dpat, 0, NDRUM - 1, KD_LIST, G_DRUMS, DRUM_NAME}, {"KICK", &set.dkick, 0, 100, KD_OFF, G_DRUMS, 0},
-     {"HI-HAT", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"RIM", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
+     {"SPACE", &set.mrev, 0, 100, KD_OFF, G_MELODY, 0}, {"PRESET", &set.msound, 0, NSOUND, KD_LIST, G_MELODY, msound_name}},
+    {{"STYLE", &set.dpat, 0, NDRUM - 1, KD_LIST, G_DRUMS, DRUM_NAME}, {"KICK", &set.dkick, 0, 100, KD_OFF, G_DRUMS, 0},
+     {"HATS", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"SNARE", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
 };
 
 static int settings_ok(void)
@@ -542,14 +567,18 @@ static int settings_ok(void)
 }
 
 /* ------------------------------------------------------------------ platform contract --- */
+static void game_init(void);
 void app_init(void)
 {
     int g;
+    msound_name[0] = "AS CHORDS";
+    for (g = 0; g < NSOUND; g++) msound_name[g + 1] = SOUND_NAME[g];
     for (g = 0; g < NGRID; g++) {
         grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
     }
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || !settings_ok())
         settings_defaults();
+    game_init();
     eng_init();
     send_sound();
     send_rhythm();
@@ -683,7 +712,11 @@ static void encoder(int k, int32_t e)
 {
     switch (k) {
     case EN_SELECT:
-        wrap_u8(&set.grid, e, NGRID); set.rich = GRID_DEF[set.grid].rich; set.key = GRID_DEF[set.grid].key; app_say("SET", GRID_DEF[set.grid].name);
+        wrap_u8(&set.grid, e, NGRID);
+        song_style();                                           /* the song's own sound, tempo and drums */
+        app_say("SET", GRID_DEF[set.grid].name);
+        send_sound(); send_bass(); send_drums(); send_params();
+        if (set.rhythm) send_rhythm();
         rechord();
         break;
     case EN_ALGO:
@@ -703,7 +736,291 @@ static void encoder(int k, int32_t e)
     dirty();
 }
 
+/* ------------------------------------------------------------------ the run (CHORD RUN) --- */
+/* While you play (a chord sounds, a melody note, the loop) the little runner runs: its metres add up (kept in the flash, apart
+ * from the settings), a run ends after 3 s of quiet (the best one is kept), new characters unlock at so many metres, and
+ * there is always a mission (one after the other, a bit harder each round) that gives metres on top. */
 static const char *const CHR_NAME_B[10] = {"CUBE", "DIAMOND", "SPIKE", "ORB", "HEXAGON", "CROSS", "STAR", "ARROW", "RING", "HOURGLASS"};
+static const uint32_t UNLOCK_M[10] = {0u, 0u, 250u, 700u, 1400u, 2400u, 3600u, 5200u, 7200u, 10000u};
+#define PROG_MAGIC 0x31524E43u                  /* "CNR1" */
+typedef struct {
+    uint32_t magic;
+    uint32_t metres, best;                      /* metres run in all, the longest run */
+    uint32_t chords, notes;                     /* chords and melody notes played in all */
+    uint32_t missions;                          /* missions done: the next one is the one after */
+    uint32_t songs;                             /* a bit per song played */
+    uint32_t rsv[4];
+} prog_t;
+static prog_t prog;
+static uint8_t prog_dirty;
+
+enum { MS_CHORDS, MS_NOTES, MS_RUN, MS_SONGS, MS_ALL, MS_DRUMS, MS_LOOP, MS_TOTAL, NMS };
+static const struct { const char *a, *b; uint16_t base, step, cap; } MISSION[NMS] = {
+    {"PLAY ", " CHORDS", 24, 12, 96},
+    {"PLAY ", " NOTES", 40, 20, 160},
+    {"RUN ", " M AT ONCE", 120, 60, 600},
+    {"PLAY ", " SONGS", 3, 1, 8},
+    {"ALL CHORDS OF A SONG", "", 0, 0, 0},
+    {"JAM ", " S WITH DRUMS", 45, 15, 180},
+    {"RECORD A LOOP (REC)", "", 1, 0, 1},
+    {"RUN ", " M", 400, 200, 2000},
+};
+static const uint8_t MS_ORDER[NMS] = {MS_CHORDS, MS_NOTES, MS_RUN, MS_SONGS, MS_ALL, MS_DRUMS, MS_LOOP, MS_TOTAL};
+
+static struct {
+    float speed, run_m, carry, scroll;          /* m/s now, this run's metres, a part metre not yet counted, the ground's scroll (px) */
+    uint32_t busy_at, note_at, party_at;        /* last played, last melody note, a celebration */
+    uint8_t running;                            /* a run is under way */
+    uint8_t mtype, mgrid, mslots;               /* the mission, and for EVERY CHORD: the song, the chords played in it */
+    uint16_t mtarget;
+    float mprog;
+    uint32_t mseen;                             /* songs played in this mission (a bit each) */
+} run;
+static struct { char a[24], b[24]; uint32_t at, until; } toast;
+
+static void show_toast(const char *a, const char *b)
+{
+    toast.a[0] = 0; text_cat(toast.a, a);
+    toast.b[0] = 0; text_cat(toast.b, b);
+    toast.at = plat_ms(); toast.until = toast.at + 2600u;
+    run.party_at = toast.at;
+    app_say(a, b);
+}
+
+static int chars_unlocked(void)
+{
+    int i, n = 0;
+    for (i = 0; i < 10; i++) if (prog.metres >= UNLOCK_M[i]) n = i + 1;
+    return n;
+}
+
+static int grid_full_mask(void) { return (1 << grid_n[set.grid]) - 1; }
+static int popcount8(uint32_t v) { int n = 0; while (v) { n += (int)(v & 1u); v >>= 1; } return n; }
+
+static void mission_start(void)
+{
+    uint32_t k = prog.missions;
+    int round = (int)(k / NMS), t;
+    run.mtype = MS_ORDER[k % NMS];
+    t = MISSION[run.mtype].base + MISSION[run.mtype].step * round;
+    if (t > MISSION[run.mtype].cap && MISSION[run.mtype].cap) t = MISSION[run.mtype].cap;
+    run.mtarget = (uint16_t)t;
+    run.mprog = 0.0f;
+    run.mseen = 0;
+    run.mgrid = set.grid; run.mslots = 0;
+}
+
+/* the mission as text: "PLAY 24 CHORDS", and its progress "5/24" */
+static void mission_text(char *b, char *p)
+{
+    char n[12];
+    b[0] = 0; p[0] = 0;
+    text_cat(b, MISSION[run.mtype].a);
+    if (MISSION[run.mtype].b[0]) { int_text(run.mtarget, n); text_cat(b, n); text_cat(b, MISSION[run.mtype].b); }
+    if (run.mtype == MS_ALL) {
+        int_text(popcount8(run.mslots), p); text_cat(p, "/"); int_text(grid_n[set.grid], n); text_cat(p, n);
+    } else if (run.mtype != MS_LOOP) {
+        int_text((int32_t)run.mprog, p); text_cat(p, "/"); int_text(run.mtarget, n); text_cat(p, n);
+    }
+}
+
+static void add_metres(uint32_t m)
+{
+    int before = chars_unlocked(), after;
+    prog.metres += m;
+    prog_dirty = 1;
+    after = chars_unlocked();
+    if (after > before) {
+        char t[24];
+        t[0] = 0; text_cat(t, CHR_NAME_B[after - 1]); text_cat(t, " - PRESS SEQ");
+        show_toast("NEW CHARACTER", t);
+        eng_blip(BLIP_TOC);
+    }
+}
+
+static void mission_check(void)
+{
+    int done = run.mtype == MS_ALL ? run.mslots != 0 && run.mslots == grid_full_mask() : run.mprog >= (float)run.mtarget;
+    if (done) {
+        uint32_t bonus = 150u + 50u * (prog.missions / NMS);
+        char t[16], n[12];
+        prog.missions++;
+        prog_dirty = 1;
+        int_text((int32_t)bonus, n);
+        t[0] = 0; text_cat(t, "+"); text_cat(t, n); text_cat(t, " M");
+        show_toast("MISSION DONE", t);
+        eng_blip(BLIP_PLOP);
+        mission_start();
+        add_metres(bonus);
+    }
+}
+
+/* the player played a chord (key) or stopped it (-1), a melody note */
+static void game_chord(int key)
+{
+    int v, o, slot;
+    uint32_t now = plat_ms();
+    run.busy_at = now;
+    if (key < 0) return;
+    prog.chords++;
+    prog.songs |= 1u << set.grid;
+    if (run.mtype == MS_CHORDS) run.mprog += 1.0f;
+    if (run.mtype == MS_SONGS && !(run.mseen & (1u << set.grid))) { run.mseen |= 1u << set.grid; run.mprog += 1.0f; }
+    if (run.mtype == MS_ALL) {
+        if (run.mgrid != set.grid) { run.mgrid = set.grid; run.mslots = 0; }
+        slot = key_slot(key, &v, &o);
+        if (slot >= 0) run.mslots |= (uint8_t)(1u << slot);
+    }
+    mission_check();
+}
+static void game_note(void)
+{
+    run.note_at = run.busy_at = plat_ms();
+    prog.notes++;
+    if (run.mtype == MS_NOTES) { run.mprog += 1.0f; mission_check(); }
+}
+
+/* ------------------------------------------------------------------ the loop (REC) --- */
+/* REC: ready; the first chord starts the recording, 4 bars (of the tempo), then it plays round and round (the chord changes,
+ * as played), and the melody is yours to play over it. REC again: while recording, the loop closes at the bar; while playing,
+ * a pause; paused, it plays again from its start. REC held 1 s: the loop is gone. */
+enum { LP_OFF, LP_READY, LP_REC, LP_PLAY, LP_PAUSE };
+#define LP_MAX 96
+#define LP_BARS 4
+static struct {
+    uint8_t st, firing, held_done;
+    uint16_t n, len;                            /* events, the loop's length in steps (16 a bar) */
+    struct { uint16_t step; int8_t key; } ev[LP_MAX];
+    uint32_t t0, rec_down;                      /* the recording's / the round's start (ms), REC pressed at */
+    int32_t last;                               /* the last step played this round */
+} lp;
+
+static float step_ms(void) { return 15000.0f / (ck_bpm > 0.0f ? ck_bpm : (float)set.bpm); }
+
+static void lp_note(int key)
+{
+    uint32_t now = plat_ms();
+    if (lp.st == LP_READY && key >= 0) {
+        lp.st = LP_REC; lp.t0 = now; lp.n = 0; lp.len = LP_BARS * 16;
+        app_say("RECORDING", "4 BARS");
+    }
+    if (lp.st == LP_REC && lp.n < LP_MAX) {
+        int32_t st = (int32_t)((float)(now - lp.t0) / step_ms() + 0.5f);
+        if (st < (int32_t)lp.len) { lp.ev[lp.n].step = (uint16_t)st; lp.ev[lp.n].key = (int8_t)key; lp.n++; }
+    }
+}
+
+static void lp_fire(int i)
+{
+    lp.firing = 1;
+    if (lp.ev[i].key >= 0) { held_idx = -1; play(lp.ev[i].key); }
+    else if (active) stop();
+    lp.firing = 0;
+}
+
+static void lp_close(uint32_t now)
+{
+    float sm = step_ms();
+    uint32_t bars = (uint32_t)((float)(now - lp.t0) / (sm * 16.0f)) + 1u;
+    if (bars > LP_BARS) bars = LP_BARS;
+    lp.len = (uint16_t)(bars * 16u);
+    lp.t0 += (uint32_t)((float)lp.len * sm);    /* the next round starts where the recording's bars end */
+    lp.last = -1;
+    lp.st = LP_PLAY;
+    app_say("LOOP", "PLAYING - PLAY ON TOP");
+    if (run.mtype == MS_LOOP) { run.mprog = 1.0f; mission_check(); }
+}
+
+static void lp_tick(uint32_t now)
+{
+    float sm = step_ms();
+    int32_t cur;
+    int i;
+    if (lp.st == LP_REC && (float)(now - lp.t0) >= (float)lp.len * sm) lp_close(lp.t0 + (uint32_t)((float)lp.len * sm) - 1u);
+    if (lp.st != LP_PLAY || (int32_t)(now - lp.t0) < 0) return;
+    cur = (int32_t)((float)(now - lp.t0) / sm);
+    while (cur >= (int32_t)lp.len) {             /* the round ends: its last events, then the next round */
+        for (i = 0; i < lp.n; i++) if ((int32_t)lp.ev[i].step > lp.last) lp_fire(i);
+        lp.t0 += (uint32_t)((float)lp.len * sm);
+        cur -= lp.len;
+        lp.last = -1;
+    }
+    for (i = 0; i < lp.n; i++)
+        if ((int32_t)lp.ev[i].step > lp.last && (int32_t)lp.ev[i].step <= cur) lp_fire(i);
+    lp.last = cur;
+    run.busy_at = now;
+}
+
+/* REC: a tap (on release) moves the loop on; held 1 s, it is gone */
+static void lp_button(int down, uint32_t now)
+{
+    if (down) { lp.rec_down = now; lp.held_done = 0; return; }
+    if (lp.held_done) return;
+    switch (lp.st) {
+    case LP_OFF: lp.st = LP_READY; app_say("LOOP", "PLAY A CHORD TO RECORD"); break;
+    case LP_READY: lp.st = LP_OFF; app_say("LOOP", "OFF"); break;
+    case LP_REC: lp_close(now); break;
+    case LP_PLAY: lp.st = LP_PAUSE; lp.firing = 1; if (active) stop(); lp.firing = 0; app_say("LOOP", "PAUSED"); break;
+    default: lp.st = LP_PLAY; lp.t0 = now; lp.last = -1; app_say("LOOP", "PLAYING"); break;
+    }
+}
+static void lp_hold(uint32_t now)
+{
+    if (lp.held_done || lp.st == LP_OFF || now - lp.rec_down < 1000u) return;
+    lp.held_done = 1;
+    if (lp.st == LP_PLAY && active) { lp.firing = 1; stop(); lp.firing = 0; }
+    lp.st = LP_OFF; lp.n = 0;
+    app_say("LOOP", "CLEARED");
+}
+
+static void game_init(void)
+{
+    if (plat_store_load(OBJ_PROGRESS, &prog, sizeof prog) != (int)sizeof prog || prog.magic != PROG_MAGIC) {
+        memset(&prog, 0, sizeof prog);
+        prog.magic = PROG_MAGIC;
+    }
+    if (set.rsv[0] >= chars_unlocked()) set.rsv[0] = 0;
+    mission_start();
+}
+
+/* the player's own chord (a key down / a stop): the loop records it, the run counts it */
+static void user_chord(int key)
+{
+    lp_note(key);
+    game_chord(key);
+}
+
+/* once a frame: the runner's speed and metres, the end of a run, the timed missions */
+static int obst_near(int wo, int cx);
+static void game_step(uint32_t now, float dt)
+{
+    int busy = active || now - run.note_at < 1200u || lp.st == LP_PLAY || lp.st == LP_REC;
+    float bpm = ck_bpm > 0.0f ? ck_bpm : (float)set.bpm, vt = busy ? 5.0f * bpm / 120.0f : 0.0f, dm;
+    if (busy) run.busy_at = now;
+    run.speed += (vt - run.speed) * fm_minf(1.0f, dt * (busy ? 3.0f : 1.4f));
+    if (!busy && run.speed < 0.6f) run.speed = obst_near((int)run.scroll, 146) ? 0.6f : 0.0f;   /* it stops on free ground */
+    dm = run.speed * dt;
+    run.scroll += dm * 12.0f;                   /* 12 px a metre */
+    if (run.scroll > 30000.0f) run.scroll -= 30000.0f;   /* (a multiple of the obstacles' 300 px) */
+    if (busy && !run.running) { run.running = 1; run.run_m = 0.0f; }
+    if (run.running) {
+        run.run_m += dm;
+        if (run.mtype == MS_RUN && run.run_m > run.mprog) { run.mprog = run.run_m; mission_check(); }
+        if (!busy && now - run.busy_at > 3000u) {       /* the run ends */
+            run.running = 0;
+            if ((uint32_t)run.run_m > prog.best) {
+                char t[16];
+                if (run.run_m >= 50.0f) { int_text((int32_t)run.run_m, t); text_cat(t, " M"); show_toast("NEW BEST RUN", t); }
+                prog.best = (uint32_t)run.run_m; prog_dirty = 1;
+            }
+        }
+    }
+    if (run.mtype == MS_TOTAL && dm > 0.0f) { run.mprog += dm; mission_check(); }
+    if (run.mtype == MS_DRUMS && active && set.drums && set.rhythm) { run.mprog += dt; mission_check(); }
+    run.carry += dm;
+    if (run.carry >= 1.0f) { uint32_t w = (uint32_t)run.carry; run.carry -= (float)w; add_metres(w); }
+}
+
 static void button(int k)
 {
     char t[8];
@@ -721,14 +1038,21 @@ static void button(int k)
         eng_muffle(ui.bowl ? 1.0f : 0.0f);
         return;
     case B_REC:
-        if ((ui.btn >> B_HOME) & 1u) return;      /* HOME + REC: the reset (input), not food */
-        fun(k);
+        if ((ui.btn >> B_HOME) & 1u) return;      /* HOME + REC: the reset (input), not the loop */
+        lp_button(1, plat_ms());                  /* the loop: it acts on release (held: cleared) */
         return;
-    case B_SEQ:                                  /* the character that runs: the next one */
-        set.rsv[0] = (uint8_t)((set.rsv[0] + 1u) % 10u);
-        app_say("CHARACTER", CHR_NAME_B[set.rsv[0]]);
+    case B_SEQ: {                                /* the character that runs: the next one unlocked */
+        int n = chars_unlocked();
+        set.rsv[0] = (uint8_t)((set.rsv[0] + 1u) % (uint32_t)(n > 0 ? n : 1));
+        if (n < 10) {
+            char t[24], m[12];
+            t[0] = 0; text_cat(t, CHR_NAME_B[set.rsv[0]]); text_cat(t, "  NEXT AT ");
+            int_text((int32_t)UNLOCK_M[n], m); text_cat(t, m); text_cat(t, " M");
+            app_say("CHARACTER", t);
+        } else app_say("CHARACTER", CHR_NAME_B[set.rsv[0]]);
         hop_at = plat_ms();
         break;
+    }
     case B_ARP: case B_PLAY: fun(k); return;
     case B_OCTDN:
     case B_OCTUP:
@@ -763,6 +1087,7 @@ static void input(void)
         if (kb_white[k] < 0) continue;
         if ((keys & bit) && !(ui.keys & bit)) {
             ld_held |= bit; ld_cur = (int)k; hop_at = now; eng_lead(mel_pitch(kb_white[k]));
+            game_note();
         } else if (!(keys & bit) && (ui.keys & bit)) {
             ld_held &= ~bit;
             if (ld_cur == (int)k) {
@@ -779,22 +1104,27 @@ static void input(void)
         if (key_slot((int)k, &kv, &ko) < 0) continue;            /* a silent key */
         if ((keys & bit) && !(ui.keys & bit)) {
             /* with a rhythm the chord keeps playing: the same key again stops it */
-            if (set.rhythm && active && held_idx < 0 && cur_idx == (int)k) stop();
-            else { held_idx = (int)k; play((int)k); }
+            if (set.rhythm && active && held_idx < 0 && cur_idx == (int)k) { stop(); user_chord(-1); }
+            else { held_idx = (int)k; play((int)k); user_chord((int)k); }
         } else if (!(keys & bit) && (ui.keys & bit) && held_idx == (int)k) {
             held_idx = -1;
-            if (!set.rhythm) stop();
+            if (!set.rhythm) { stop(); user_chord(-1); }
         }
     }
     for (k = 0; k < NB; k++) {
         uint32_t bit = 1u << k;
         if ((btn & bit) && !(ui.btn & bit)) button((int)k);
     }
+    /* the loop: REC let go (a tap), REC held (cleared), its steps */
+    if (!((btn >> B_REC) & 1u) && ((ui.btn >> B_REC) & 1u) && !((btn >> B_HOME) & 1u) && !ui.reset_at) lp_button(0, now);
+    if (((btn >> B_REC) & 1u) && !((btn >> B_HOME) & 1u)) lp_hold(now);
+    lp_tick(now);
     /* HOME + REC held 3 s: back to the settings of the first start (a countdown; let go before: nothing) */
     if (((btn >> B_HOME) & 1u) && ((btn >> B_REC) & 1u)) {
         uint32_t held;
         char t[4];
         if (!ui.reset_at) { ui.reset_at = now | 1u; ui.reset_shown = 0; ui.reset_done = 0; }
+        lp.held_done = 1;                         /* (REC let go after this: no loop tap) */
         ui.home_long = 1; ui.help = 0;
         held = now - ui.reset_at;
         if (!ui.reset_done && held >= 3000u) {
@@ -831,9 +1161,15 @@ static void input(void)
     ui.keys = keys;
     ui.btn = btn;
     /* auto-save: 4 s after the last change, and never while a chord plays (a flash write stops the sound) */
-    if (set_dirty && !active && plat_ms() - dirty_at > 4000u) {
+    if (set_dirty && !active && lp.st != LP_PLAY && plat_ms() - dirty_at > 4000u) {
         if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) set_dirty = 0;
         else dirty_at = plat_ms();
+    }
+    /* the progress too: after 4 s of quiet (no chord, no melody, no loop) */
+    if (prog_dirty && !active && !ld_held && lp.st != LP_PLAY && lp.st != LP_REC && now - run.busy_at > 4000u) {
+        prog.magic = PROG_MAGIC;
+        if (plat_store_save(OBJ_PROGRESS, &prog, sizeof prog) == 0) prog_dirty = 0;
+        else run.busy_at = now;
     }
     /* lights: the keys glow, the one playing is lit; the page's button, the fun ones that are on, the pressed one */
     lit_keys = valid_keys();
@@ -841,6 +1177,8 @@ static void input(void)
     if (cur_idx >= 0 && held_idx < 0 && (now / 300u) % 2u) lit_keys &= ~(1u << (uint32_t)cur_idx);
     if (set.page != PG_MAIN) lit_btn |= 1u << PAGE_BTN[set.page];
     if (ui.bowl) lit_btn |= 1u << B_SAVE;
+    if (lp.st == LP_PLAY || ((lp.st == LP_REC || lp.st == LP_READY) && (now / (lp.st == LP_REC ? 200u : 500u)) % 2u))
+        lit_btn |= 1u << B_REC;
     if (ui.dark) lit_btn |= 1u << B_ARP;
     if (ui.clean) lit_btn |= LED_PLAY_GREEN;
     /* OCT- / OCT+: lit on the side the octave went, blinking at two octaves */
@@ -1881,11 +2219,22 @@ static void neon_block(int x, int gy)
 
 static const struct { uint8_t type; int16_t x; } OBST[5] = {{0, 40}, {0, 56}, {1, 130}, {0, 200}, {1, 262}};
 
-/* the runner: the ground at row gy, the character at column cx; speed in pixels per second, obstacles scroll left, the
- * character hops over each one (and when a chord is played) */
-static void neon_runner(int gy, int cx, int speed, int with_obst, uint32_t now)
+/* an obstacle under the runner at column cx, the ground scrolled by wo px (it does not stop on one) */
+static int obst_near(int wo, int cx)
 {
-    int i, wo = (int)((now * (uint32_t)speed) / 1000u), per = 300;
+    int i, per = 300;
+    for (i = 0; i < 5; i++) {
+        int d = ((OBST[i].x - wo) % per + per) % per - 40 + 6 - cx;
+        if (d > -26 && d < 26) return 1;
+    }
+    return 0;
+}
+
+/* the runner: the ground at row gy, the character at column cx; the ground scrolled by wo px (the obstacles move left as
+ * the runner runs), the character hops over each one (and when a chord is played) */
+static void neon_runner(int gy, int cx, int wo, int with_obst, uint32_t now)
+{
+    int i, per = 300;
     float h = 0.0f, ang = 0.0f;
     uint32_t u = now - hop_at;
     NSR(0, gy, 240, 2, ACC1);
@@ -1904,7 +2253,8 @@ static void neon_runner(int gy, int cx, int speed, int with_obst, uint32_t now)
         if (hh > h) { h = hh; ang = k * 1.5708f; }
     }
     if (h < 0.5f) { ang = 0.0f; h = 0.0f; }
-    for (i = 1; i <= 3; i++) NSR(cx - 9 - i * 6, gy - 4 - (int)(h * 0.0f), 3, 3, i == 1 ? RGB(170, 220, 60) : i == 2 ? RGB(100, 140, 50) : RGB(50, 70, 40));
+    if (!with_obst || run.speed > 0.5f)                  /* the speed trail, while it runs */
+        for (i = 1; i <= 3; i++) NSR(cx - 9 - i * 6, gy - 4, 3, 3, i == 1 ? RGB(170, 220, 60) : i == 2 ? RGB(100, 140, 50) : RGB(50, 70, 40));
     neon_char(set.rsv[0] < NCHR ? set.rsv[0] : 0, cx, gy - 8 - (int)(h + 0.5f), ang);
 }
 
@@ -1936,15 +2286,25 @@ static void neon_splash(int bottom)
         cv_text(x1, y1 - g_oy, &FONT_L, l1, RGB(245, 250, 238));
         cv_text(x2, y2 - g_oy, &FONT_L, l2, ACC1);
         NSR(x2, y2 + 36, text_w(&FONT_L, l2), 2, ACC2);
+        if (ms > 900.0f) cv_text((240 - text_w(&FONT_S, "BY SWTDR34MZ")) / 2, y2 + 44 - g_oy, &FONT_S, "BY SWTDR34MZ", RGB(245, 250, 238));
     }
     if (t > 1100u) {                                                    /* the credit, the author's own words in the help */
         NSR(0, 226, 240, 14, RGB(5, 9, 11));
         ln[0] = 0; text_cat(ln, "BASED ON BLOP BY OBSIMO");
         cv_text((240 - text_w(&FONT_XS, ln)) / 2, 226 - g_oy, &FONT_XS, ln, SOFT);
     }
-    if (ui.help && t > 1900u) {
-        NSR(0, 208, 240, 16, RGB(5, 9, 11));
-        cv_text((240 - text_w(&FONT_S, "GO STREAM MY MUSIC ;)")) / 2, 208 - g_oy, &FONT_S, "GO STREAM MY MUSIC ;)", RGB(255, 214, 110));
+    if (ui.help && t > 600u) {                                         /* the help (HOME held): the player's progress */
+        char a[32], n[12];
+        NSR(0, 176, 240, 48, RGB(5, 9, 11));
+        a[0] = 0; text_cat(a, "TOTAL "); int_text((int32_t)prog.metres, n); text_cat(a, n);
+        text_cat(a, " M   BEST "); int_text((int32_t)prog.best, n); text_cat(a, n); text_cat(a, " M");
+        cv_text((240 - text_w(&FONT_XS, a)) / 2, 180 - g_oy, &FONT_XS, a, ACC1);
+        a[0] = 0; text_cat(a, "CHARACTERS "); int_text(chars_unlocked(), n); text_cat(a, n);
+        text_cat(a, "/10   MISSIONS "); int_text((int32_t)prog.missions, n); text_cat(a, n);
+        cv_text((240 - text_w(&FONT_XS, a)) / 2, 196 - g_oy, &FONT_XS, a, RGB(245, 250, 238));
+        a[0] = 0; text_cat(a, "SONGS PLAYED "); int_text(popcount8(prog.songs), n); text_cat(a, n);
+        text_cat(a, "/"); int_text(NGRID, n); text_cat(a, n);
+        cv_text((240 - text_w(&FONT_XS, a)) / 2, 212 - g_oy, &FONT_XS, a, SOFT);
     }
 }
 
@@ -1954,6 +2314,19 @@ static void box(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
 {
     cv_rect(x, y, w, 1, c); cv_rect(x, y + h - 1, w, 1, c);
     cv_rect(x, y, 1, h, c); cv_rect(x + w - 1, y, 1, h, c);
+}
+
+/* sparks around (cx, cy) in screen rows, age ms old (a celebration) */
+static void party(int cx, int cy, uint32_t age)
+{
+    int i;
+    float k = (float)age / 1600.0f, r = 8.0f + 46.0f * ease3(k);
+    for (i = 0; i < 14; i++) {
+        float a = (float)i / 14.0f + k * 0.15f;
+        int x = cx + (int)(r * fm_sin_turns(a + 0.25f)), y = cy + (int)(r * 0.7f * fm_sin_turns(a)) + (int)(20.0f * k * k);
+        uint16_t c = i % 3 == 0 ? ACC1 : i % 3 == 1 ? ACC2 : RGB(120, 200, 255);
+        if (k < 0.85f || (age / 80u) % 2u) NSR(x, y, 3, 3, c);
+    }
 }
 
 static void draw_screen(int bottom)
@@ -1969,12 +2342,24 @@ static void draw_screen(int bottom)
         const char *r = RICH_NAME[set.rich];
         int32_t x;
         neon_sun(198, HY - 4, 34, HY, now);
-        neon_runner(HY - 2, 146, 60, 1, now);
-        if (active) {
-            cv_text(8, 2, &FONT_L, chord_txt, W);
-        }
+        neon_runner(HY - 2, 146, (int)run.scroll, 1, now);
+        if (now - run.party_at < 1600u && run.party_at) party(146, HY - 12, now - run.party_at);
+        if (active) cv_text(8, 2, text_w(&FONT_L, chord_txt) <= 100 ? &FONT_L : &FONT_B, chord_txt, W);
         x = cv_text(8, 36, &FONT_XS, SOUND_NAME[set.sound], L);
         cv_text(x + 8, 36, &FONT_XS, r, ACC1);
+        {   /* the metres: this run's (lime) while it runs, else all of them; under them the mission and how far it is */
+            char m[32], pr[12];
+            int32_t w;
+            b[0] = 0;
+            if (run.running && run.run_m >= 1.0f) { text_cat(b, "RUN "); int_text((int32_t)run.run_m, t); text_cat(b, t); text_cat(b, " M"); }
+            else { int_text((int32_t)prog.metres, b); text_cat(b, " M"); }
+            cv_text(232 - text_w(&FONT_S, b), 1, &FONT_S, b, run.running ? ACC1 : W);
+            mission_text(m, pr);
+            w = text_w(&FONT_T, m) + (pr[0] ? text_w(&FONT_T, pr) + 5 : 0);
+            cv_rect(232 - w - 8, 23, 4, 4, ACC2);
+            x = cv_text(232 - w, 18, &FONT_T, m, W);
+            if (pr[0]) cv_text(x + 5, 18, &FONT_T, pr, ACC1);
+        }
         return;
     }
     if (now < ui.msg_until) {                                   /* a message (SET ..., OCTAVE ...) takes the header's place */
@@ -1987,6 +2372,24 @@ static void draw_screen(int bottom)
         cv_text(232 - text_w(&FONT_XS, t), 0, &FONT_XS, t, ACC1);
     }
     cv_rect(8, 22, 224, 1, PU);
+    if (lp.st != LP_OFF) {   /* the loop: its state at the right, under the key; its round as a bar on the line */
+        uint16_t lc = lp.st == LP_REC ? ACC2 : lp.st == LP_PLAY ? ACC1 : L;
+        float pos = 0.0f;
+        t[0] = 0;
+        if (lp.st == LP_READY) text_cat(t, (now / 500u) % 2u ? "LOOP READY" : "");
+        else if (lp.st == LP_PAUSE) text_cat(t, "LOOP PAUSED");
+        else {
+            int32_t el = (int32_t)(now - lp.t0);
+            float stp = step_ms();
+            pos = el < 0 ? 0.0f : (float)el / (stp * (float)lp.len);
+            if (pos > 1.0f) pos = 1.0f;
+            text_cat(t, lp.st == LP_REC ? "REC " : "LOOP ");
+            int_text(el < 0 ? 1 : 1 + (int32_t)((float)el / (stp * 16.0f)), b); text_cat(t, b);
+            text_cat(t, "/"); int_text(lp.len / 16, b); text_cat(t, b);
+        }
+        if (t[0]) cv_text(232 - text_w(&FONT_T, t), 11, &FONT_T, t, lc);
+        if (lp.st == LP_REC || lp.st == LP_PLAY) cv_rect(8, 22, (int32_t)(224.0f * pos), 1, lc);
+    }
     for (i = 0; i < n; i++) {
         int one = n <= 4, sel = i == cs;
         int32_t x = 6 + (one ? i : i % 4) * 58, y = one ? 32 : 28 + (i / 4) * 45, w = 54, h = one ? 62 : 41, tw, fh;
@@ -2003,6 +2406,16 @@ static void draw_screen(int bottom)
         t[0] = (char)('1' + i); t[1] = 0;
         cv_text(x + 4, y + 3, &FONT_XS, t, sel ? K : L);
         cv_text(x + (w - tw) / 2, y + (h - fh) / 2 + 3, f, s, sel ? K : W);
+    }
+    if (now < toast.until) {   /* a celebration: a new character, a mission done, a best run */
+        uint32_t age = now - toast.at;
+        int32_t bw = 200, bh = 52, bx = 20, by = 40 + (age < 200u ? (int32_t)((200u - age) / 10u) : 0);
+        uint16_t bc = (now / 150u) % 2u ? ACC1 : ACC2;
+        cv_rect(bx, by, bw, bh, RGB(6, 14, 16));
+        box(bx, by, bw, bh, bc);
+        box(bx + 2, by + 2, bw - 4, bh - 4, PU);
+        cv_text(120 - text_w(&FONT_S, toast.a) / 2, by + 8, &FONT_S, toast.a, bc);
+        cv_text(120 - text_w(&FONT_XS, toast.b) / 2, by + 30, &FONT_XS, toast.b, W);
     }
     (void)K;
 }
@@ -2038,6 +2451,7 @@ void app_frame(void)
         if (dt > 0.1f) dt = 0.1f;
         ui.frame_at = now;
         scene_step(now, dt);
+        game_step(now, dt);
         {
             int over = sc.title < 0.5f;     /* the minimal screen; the intro and the help keep the old picture */
             cv_begin(240, 120, 0);
@@ -2081,6 +2495,18 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "bsound")) *got = set.bsound;
     else if (!strcmp(what, "creature")) *got = set.creature;
     else if (!strcmp(what, "reverb")) *got = set.reverb;
+    else if (!strcmp(what, "loop")) *got = lp.st;
+    else if (!strcmp(what, "loopn")) *got = lp.n;
+    else if (!strcmp(what, "metres")) *got = (int)prog.metres;
+    else if (!strcmp(what, "metres_h")) *got = (int)(prog.metres / 100u);   /* (hundreds: the run's own metres vary) */
+    else if (!strcmp(what, "best_h")) *got = (int)(prog.best / 100u);
+    else if (!strcmp(what, "running")) *got = run.running;
+    else if (!strcmp(what, "unlocked")) *got = chars_unlocked();
+    else if (!strcmp(what, "missions")) *got = (int)prog.missions;
+    else if (!strcmp(what, "mission")) *got = run.mtype;
+    else if (!strcmp(what, "character")) *got = set.rsv[0];
+    else if (!strcmp(what, "dpat")) *got = set.dpat;
+    else if (!strcmp(what, "msound")) *got = set.msound;
     else return 0;
     return 1;
 }

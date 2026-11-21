@@ -1,4 +1,4 @@
-# OSR-1 in the host simulator:
+# CHORD RUN (OSR-1 / Blop) in the host simulator:
 #   tools/build.py /path/to/osr1 --host, then osr1/build/host/osr1_host osr1/tests/basic.txt osr1/build/host
 wait 600
 shot boot.png
@@ -19,13 +19,16 @@ shot chord.png
 key 1 up
 wait 30
 expect active 0
-# a grid, a rhythm: the chord keeps playing (latch); the drums from the main page's K4 (kick only at first)
+# a set (its own sound: BABY ONE MORE TIME, GRAND KEYS, 93 BPM), a rhythm: the chord keeps playing (latch); the drums from the main page's K4 (kick only at first)
 turn SELECT 4
 wait 30
 expect grid 4
-turn ALGO 8
+expect sound 17
+expect bpm 93
+expect msound 11
+turn ALGO 2
 wait 30
-expect rhythm 8
+expect rhythm 2
 turn K4 1
 wait 150
 turn K4 1
@@ -92,7 +95,7 @@ wait 60
 expect page 3
 turn K1 1
 wait 30
-expect bpm 119
+expect bpm 94
 shot groove.png
 tap GLO
 wait 60
@@ -103,7 +106,7 @@ shot drums.png
 tap LFO
 wait 30
 expect page 4
-turn K1 1
+turn K1 -3
 wait 30
 expect bsound 3
 turn K3 2
@@ -112,7 +115,7 @@ wav bass_acid.wav
 wait 1500
 wavstop
 shot bass.png
-# the melody page (EDIT): cutoff, level, reverb, preset
+# the melody page (EDIT): cutoff, level, space, preset
 tap EDIT
 wait 30
 expect page 5
@@ -167,7 +170,7 @@ expect page 5
 tap HOME
 wait 30
 expect page 0
-# the bottom row: bowl, food, light, clean screen, pirouette
+# the bottom row: bowl (muffled), light, clean screen, the next character
 tap SAVE
 wait 900
 expect bowl 1
@@ -175,11 +178,6 @@ shot bowl.png
 tap SAVE
 wait 600
 expect bowl 0
-tap REC
-wait 700
-shot food.png
-wait 2500
-shot food2.png
 tap ARP
 wait 500
 expect dark 1
@@ -211,13 +209,14 @@ wait 20
 key 10 up
 wait 30
 expect active 0
-turn ALGO -8
+turn ALGO -2
 wait 300
+expect rhythm 0
 shot sleep.png
-# sounds: a pluck with strum, an FM key
-turn PRESET 9
+# sounds: a plucked guitar with strum, an FM e-piano
+turn PRESET -4
 wait 30
-expect sound 9
+expect sound 13
 tap SEL
 turn K4 10
 tap SEL
@@ -227,8 +226,9 @@ wav pluck_strum.wav
 wait 1200
 wavstop
 key 1 up
-turn PRESET -8
+turn PRESET 3
 wait 30
+expect sound 16
 key 5 down
 wav fm.wav
 wait 1200
@@ -249,7 +249,7 @@ expect dirty 0
 reboot
 wait 600
 expect grid 4
-expect sound 1
+expect sound 16
 expect page 0
 # HOME + REC held 3 s: the first settings back (let go before: nothing)
 turn PRESET 3
@@ -260,7 +260,8 @@ wait 1500
 release REC
 release HOME
 wait 100
-expect sound 4
+expect sound 19
+expect loop 0
 press HOME
 press REC
 wait 1200
@@ -269,9 +270,10 @@ wait 2000
 release REC
 release HOME
 wait 100
-expect sound 0
+expect sound 17
 expect grid 0
 expect page 0
+expect loop 0
 # MIDI clock in by USB: its tempo leads (and its beats place the steps); gone, BPM leads again
 midi FA
 clock 120 20

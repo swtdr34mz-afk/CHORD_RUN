@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Obsimo (OSR Records) */
-/* BLOP by Obsimo: one-finger chord grids, chord rhythms, kick and sidechain, for the M-VAVE FM-1 (on fm1-base).
+/* CHORD RUN by swtdr34mz, based on BLOP by Obsimo: song chords on the black keys, a melody on the white ones, a runner
+ * that runs while you play, for the M-VAVE FM-1 (on fm1-base).
  * This header is the app's half of the contract with the platform (device/unity.c, host/plat_host.c). */
 #pragma once
 #include <stdint.h>
@@ -12,9 +13,10 @@
 #define APP_TICK                        /* app_tick: the MIDI in, each clock timed to the ms */
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 
-/* the store: the app's settings and the panel calibration (the platform's), and their flash offsets */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u}
+/* the store: the app's settings, the panel calibration (the platform's) and the player's progress (metres run, missions:
+ * apart from the settings, so a new settings layout never takes it away), and their flash offsets */
+enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_PROGRESS, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u}
 
 void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);

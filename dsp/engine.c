@@ -28,6 +28,7 @@ static const uint32_t AP_LEN[4] = {142u, 107u, 379u, 277u};
 
 /* ------------------------------------------------------------------ big buffers (the pool on the device) --- */
 static float ks_buf[4][KS_N] PLAT_POOL;
+static float lks_buf[KS_N] PLAT_POOL;     /* the melody voice's plucked string */
 static float ch_buf[CH_N] PLAT_POOL;
 #define LR_N 2560u                      /* the melody's reverb: 4 lines of 30..53 ms, modulated, no pre-delay */
 static float lr_line[4][LR_N] PLAT_POOL;
@@ -59,7 +60,7 @@ typedef struct {
         struct { int step; uint32_t at_ms; } y;   /* step: -1 = the clock is gone */
         struct { float m; } ld;
         sound_t ls;
-        struct { float cut, lev, rev; } lq;
+        struct { float cut, lev, rev, del; } lq;
     } u;
 } cmd_t;
 #define QN 16u
@@ -95,6 +96,10 @@ static struct {
     /* drums */
     drums_t dr;
     float dk, dh, dr_l, k_gain, h_env, h_gain, h_dec, h_lp, h_lp2, r_env, r_gain, r_ph1, r_ph2;
+    float s_env, s_tenv, s_gain, s_ph, s_lp, s_hp, s_clapt;   /* snare / clap */
+    int s_clapn;
+    float h_roll_left, h_roll_len, h_roll_g;                   /* hi-hat rolls: the hits left in the step */
+    int h_roll;
     /* bass */
     uint8_t bsound, bmotif, bstage, boct;
     float blevel, bcut, be, bgate, bfenv, bic1, bic2, bg, bk;
@@ -111,7 +116,7 @@ static struct {
     float e, vel, atk_s, rel_s;
     int stage;
     float gate_left;
-    float fenv, ienv;
+    float fenv, ienv, ie_s;               /* ie_s: the FM index envelope, smoothed (a hit must not jump it: a click) */
     /* filter */
     float ic1, ic2, g;
     /* transition fade */
@@ -140,10 +145,13 @@ static struct {
     volatile uint32_t last_hit_ms;
     float level;
     /* the melody (lead) voice: mono, the sound's own oscillators, envelope and filter */
-    float ld_m, ld_ph1, ld_ph2, ld_e, ld_fe, ld_lp, ld_lp2;
+    float ld_m, ld_ph1, ld_ph2, ld_e, ld_fe, ld_lp, ld_lp2, ld_pm, ld_prev, ld_ie, ld_last;
+    uint32_t ld_w;
+    float ld_ies;        /* the melody's FM index envelope, smoothed */
+    uint8_t ld_exc;      /* a plucked melody: a new note to pluck */
     uint8_t ld_st;       /* 0 off, 1 attack, 2 decay / sustain, 3 release */
     sound_t lp;          /* the melody's sound, cutoff (Hz), level, reverb send */
-    float lcut, llev, lrev;
+    float lcut, llev, lrev, ldel;
     uint32_t lr_w[4], lr_apw0, lr_apw1;
     float lr_lp[4], lr_ph[4], lr_en;
 } E;
@@ -191,10 +199,10 @@ void eng_chord(const float notes[4], float bass, float glide_s)
 }
 void eng_stop(void) { cmd_t c; c.t = CMD_STOP; push(&c); }
 void eng_lead_sound(const sound_t *p) { cmd_t c; c.t = CMD_LSOUND; c.u.ls = *p; push(&c); }
-void eng_lead_params(float cut_hz, float level, float reverb)
+void eng_lead_params(float cut_hz, float level, float reverb, float delay)
 {
     cmd_t c;
-    c.t = CMD_LPARAM; c.u.lq.cut = cut_hz; c.u.lq.lev = level; c.u.lq.rev = reverb;
+    c.t = CMD_LPARAM; c.u.lq.cut = cut_hz; c.u.lq.lev = level; c.u.lq.rev = reverb; c.u.lq.del = delay;
     push(&c);
 }
 void eng_lead(float m) { cmd_t c; c.t = CMD_LEAD; c.u.ld.m = m; push(&c); }
@@ -221,10 +229,10 @@ void eng_groove(float swing, float density, float gate, float strum)
     c.t = CMD_GROOVE; c.u.g.swing = swing; c.u.g.dens = density; c.u.g.gate = gate; c.u.g.strum = strum;
     push(&c);
 }
-void eng_drums(const drums_t *d, float kick, float hat, float rim)
+void eng_drums(const drums_t *d, float kick, float hat, float snare)
 {
     cmd_t c;
-    c.t = CMD_DRUMS; c.u.d.d = *d; c.u.d.k = kick; c.u.d.h = hat; c.u.d.r = rim;
+    c.t = CMD_DRUMS; c.u.d.d = *d; c.u.d.k = kick; c.u.d.h = hat; c.u.d.r = snare;
     push(&c);
 }
 void eng_bass(int sound, int motif, float level, float cut)
@@ -265,19 +273,19 @@ static void set_notes(const float *notes, float bass, float glide_chunks)
     else E.binc = (bass - E.bm) / glide_chunks;
 }
 
-static void excite(voice_t *v, float bright)
+static void excite_buf(float *buf, uint32_t w, float m, float bright)
 {
-    float L = SR / mtof(v->m), lp = 0.0f, a = 0.06f + 0.42f * bright;   /* a softer pick: less of a hard click */
+    float L = SR / mtof(m), lp = 0.0f, a = 0.06f + 0.42f * bright;   /* a softer pick: less of a hard click */
     uint32_t n, j;
-    float *buf = ks_buf[v - E.v];
     if (L > (float)(KS_N - 4u)) L = (float)(KS_N - 4u);
     n = (uint32_t)L + 2u;
     for (j = 0; j < n; j++) {
-        uint32_t k = (v->w + KS_N - n + j) & (KS_N - 1u);
+        uint32_t k = (w + KS_N - n + j) & (KS_N - 1u);
         lp += a * (rnd() - lp);
         buf[k] = buf[k] * 0.25f + lp * 1.4f;
     }
 }
+static void excite(voice_t *v, float bright) { excite_buf(ks_buf[v - E.v], v->w, v->m, bright); }
 
 /* ------------------------------------------------------------------ MIDI out --- */
 /* The notes go out as they sound: rhythm, strum, latch, glide (a glide = the new notes, legato). The chord's four
@@ -431,9 +439,22 @@ static void on_step(void)
             kick = 1;
         }
         if (E.dr.h[i] > 0.0f) {
+            int rl = E.dr.roll[i];
             E.h_env = 1.0f;
             E.h_gain = E.dr.h[i] * E.dh * (0.85f + 0.15f * rndu());
             E.h_dec = fm_expf(-1.0f / (fm_maxf(0.003f, E.dr.open[i] ? E.dr.kit.h_open : E.dr.kit.h_closed) * SR));
+            E.h_roll = 0;
+            if (rl > 1) {                               /* a roll: the other hits of the step, evenly in it */
+                E.h_roll = rl - 1;
+                E.h_roll_len = sl / (float)rl;
+                E.h_roll_left = E.h_roll_len;
+                E.h_roll_g = E.h_gain;
+            }
+        }
+        if (E.dr.s[i] > 0.0f) {
+            E.s_env = 1.0f; E.s_tenv = 1.0f; E.s_gain = E.dr.s[i] * E.dr_l; E.s_ph = 0.0f;
+            E.s_clapn = E.dr.kit.s_clap > 0.5f ? 2 : 0;     /* a clap: two more bursts, 11 ms apart */
+            E.s_clapt = 0.011f * SR;
         }
         if (E.dr.r[i] > 0.0f) { E.r_env = 1.0f; E.r_gain = E.dr.r[i] * E.dr_l; E.r_ph1 = E.r_ph2 = 0.0f; }
     }
@@ -541,10 +562,10 @@ static void run_commands(void)
             break;
         }
         case CMD_LSOUND: E.lp = c->u.ls; break;
-        case CMD_LPARAM: E.lcut = c->u.lq.cut; E.llev = c->u.lq.lev; E.lrev = c->u.lq.rev; break;
+        case CMD_LPARAM: E.lcut = c->u.lq.cut; E.llev = c->u.lq.lev; E.lrev = c->u.lq.rev; E.ldel = c->u.lq.del; break;
         case CMD_LEAD:
             if (c->u.ld.m < 0.0f) { if (E.ld_st) E.ld_st = 3; }
-            else { E.ld_m = c->u.ld.m; E.ld_st = 1; E.ld_fe = 1.0f; }
+            else { E.ld_m = c->u.ld.m; E.ld_st = 1; E.ld_fe = 1.0f; E.ld_ie = 1.0f; E.ld_exc = 1; }
             break;
         case CMD_PANIC: E.ld_st = 0; E.ld_e = 0.0f; E.active = 0; E.running = 0; E.e = 0.0f; E.stage = 0; midi_chord_off(); midi_bass_off(); break;
         case CMD_SYNC: {    /* a beat of the outside clock: step (even) began at_ms (plat_ms) */
@@ -570,6 +591,7 @@ void eng_init(void)
     int i;
     zero(&E, sizeof E);
     zero(ks_buf, sizeof ks_buf);
+    zero(lks_buf, sizeof lks_buf);
     zero(ch_buf, sizeof ch_buf);
     zero(lr_line, sizeof lr_line);
     zero(lr_ap0, sizeof lr_ap0);
@@ -640,6 +662,12 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float kPdecay = fm_expf(-1.0f / (fm_maxf(0.002f, kt->k_pdec) * SR)); /* its pitch drop */
         const float hpC = 0.25f + 0.55f * kt->h_tone;
         const float rDec = fm_expf(-1.0f / (fm_maxf(0.002f, kt->r_dec) * SR));
+        const float sDec = fm_expf(-1.0f / (fm_maxf(0.01f, kt->s_dec) * SR));          /* the snare's noise */
+        const float sTdec = fm_expf(-1.0f / (fm_maxf(0.01f, kt->s_dec * 0.45f) * SR));   /* its body, shorter */
+        const float sBurst = fm_expf(-1.0f / (0.0045f * SR));                            /* a clap's first bursts */
+        const float sHp = 0.06f + 0.55f * kt->s_snap;
+        const float sAmp = kt->s_clap > 0.5f ? 1.45f : 0.95f;                          /* a clap's bursts lose a bit: louder */
+        const float dspace = kt->space;
         const int eng = p->engine;
         const float lvl = p->level * (eng == ENGINE_FM ? 0.16f : eng == ENGINE_PLUCK ? 0.30f : 0.11f);
         const float kdamp = 1.0f / fm_maxf(0.3f, E.q);
@@ -649,20 +677,33 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
         const float ldC = fm_expf(-1.0f / (fm_maxf(0.005f, E.lp.dec) * SR * 0.3f));
         const float lrC = fm_expf(-1.0f / (fm_maxf(0.02f, E.lp.rel) * SR * 0.25f));
         const float lfC = fm_expf(-1.0f / (fm_maxf(0.01f, E.lp.fdec) * SR * 0.33f));
+        const float liC = fm_expf(-1.0f / (fm_maxf(0.01f, E.lp.idec) * SR * 0.33f));   /* the melody's FM index */
+        const int leng = E.lp.engine;
+        const float lgain = leng == ENGINE_FM ? 0.256f : leng == ENGINE_PLUCK ? 0.7f : 0.176f;
         const float rv_damp = 0.575f;             /* ~6 kHz in the reverb's loop */
 
         for (c0 = 0; c0 < n; c0 += CHUNK) {
             uint32_t cn = n - c0 < CHUNK ? n - c0 : CHUNK;
             float inc1[4], inc2[4], incc[4], incm[4], ksL[4], binc;
-            float ldi1 = 0.0f, ldi2 = 0.0f, lda = 0.0f, ldo = 0.0f, lrl = 0.0f, lrr = 0.0f;      /* the melody voice, per chunk: phase steps, filter coefficient */
+            float ldi1 = 0.0f, ldi2 = 0.0f, lda = 0.0f, ldo = 0.0f, lrl = 0.0f, lrr = 0.0f, ldL = 0.0f;   /* the melody voice, per chunk: phase steps, loop, filter */
             float wob = p->wob * 0.01f * fm_sin_turns(E.wob_ph), fc, ch1, ch2;
             E.wob_ph += p->wob_rate * (float)cn / SR;
             if (E.wob_ph >= 1.0f) E.wob_ph -= 1.0f;
             if (E.ld_st) {
                 float lb = E.lp.cut > 0.0f ? E.lp.cut * E.lcut * (1.0f / CUT_MID_HZ) : E.lcut;
                 float lfc = fm_minf(SR * 0.45f, lb * fm_exp2f(E.lp.fenv * E.ld_fe + (E.ld_m - 60.0f) * (0.6f / 12.0f)));   /* follows the note a bit */
-                ldi1 = mtof(E.ld_m - E.lp.det * 0.005f) / SR;
-                ldi2 = mtof(E.ld_m + E.lp.oct2 + E.lp.det * 0.005f) / SR;
+                if (leng == ENGINE_FM) {
+                    ldi1 = mtof(E.ld_m) / SR;
+                    ldi2 = ldi1 * E.lp.ratio;
+                } else if (leng == ENGINE_PLUCK) {
+                    ldL = fm_minf(SR / mtof(E.ld_m), (float)(KS_N - 4u));
+                    if (E.ld_exc) excite_buf(lks_buf, E.ld_w, E.ld_m, E.lp.bright);
+                    lfc = fm_minf(lfc, 2400.0f);
+                } else {
+                    ldi1 = mtof(E.ld_m - E.lp.det * 0.005f) / SR;
+                    ldi2 = mtof(E.ld_m + E.lp.oct2 + E.lp.det * 0.005f) / SR;
+                }
+                E.ld_exc = 0;
                 lda = fm_minf(0.95f, 6.2831853f * lfc / SR);
             }
             for (i = 0; i < 4; i++) {           /* pitches for this chunk */
@@ -711,6 +752,8 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
             E.rv_hpl = fm_flush(E.rv_hpl); E.rv_hpr = fm_flush(E.rv_hpr); E.k_tail = fm_flush(E.k_tail);
             E.duck = fm_flush(E.duck);
             E.ld_lp = fm_flush(E.ld_lp); E.ld_lp2 = fm_flush(E.ld_lp2); E.lr_en = fm_flush(E.lr_en);
+            E.ld_prev = fm_flush(E.ld_prev); E.ld_ies = fm_flush(E.ld_ies); E.ie_s = fm_flush(E.ie_s); E.ld_last = fm_flush(E.ld_last); E.ld_ie = fm_flush(E.ld_ie);
+            E.s_lp = fm_flush(E.s_lp); E.s_hp = fm_flush(E.s_hp);
             for (i = 0; i < 4; i++) E.lr_lp[i] = fm_flush(E.lr_lp[i]);
             for (i = 0; i < 4; i++) { E.rv_lp[i] = fm_flush(E.rv_lp[i]); E.v[i].prev = fm_flush(E.v[i].prev); E.v[i].last = fm_flush(E.v[i].last); }
             {   /* a sound's own cutoff, moved by the knob (about 3.7 octaves each way); 0: the knob's alone */
@@ -755,6 +798,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 }
                 E.fenv *= fC;
                 E.ienv *= iC;
+                E.ie_s += (E.ienv - E.ie_s) * 0.03f;   /* ~0.7 ms */
                 if (E.fenv < 1e-6f) E.fenv = 0.0f;   /* no denormals: they cost a lot */
                 if (E.ienv < 1e-6f) E.ienv = 0.0f;
                 /* transition fade */
@@ -798,7 +842,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         v->p1 += inc1[i]; if (v->p1 >= 1.0f) v->p1 -= 1.0f;
                         v->p2 += inc2[i]; if (v->p2 >= 1.0f) v->p2 -= 1.0f;
                     } else if (eng == ENGINE_FM) {
-                        float idx = p->idx * (p->isus + (1.0f - p->isus) * E.ienv);
+                        float idx = p->idx * (p->isus + (1.0f - p->isus) * E.ie_s);
                         float mod = fm_sin_turns(v->pm + p->fb * v->prev * 0.15915494f) * idx;
                         v->prev = mod;
                         vo = fm_sin_turns(v->pc + mod * 0.15915494f);
@@ -897,8 +941,31 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                         E.r_ph1 += kt->r_f1 / SR; if (E.r_ph1 >= 1.0f) E.r_ph1 -= 1.0f;
                         E.r_ph2 += kt->r_f2 / SR; if (E.r_ph2 >= 1.0f) E.r_ph2 -= 1.0f;
                         rv = (fm_sin_turns(E.r_ph1) * 0.55f + fm_sin_turns(E.r_ph2) * 0.45f + rnd() * kt->r_noise * E.r_env)
-                             * E.r_env * E.r_gain * 0.35f;
+                             * E.r_env * E.r_gain * 0.55f;
                         E.r_env *= rDec;
+                    }
+                    if (E.h_roll) {                   /* the roll's next hit */
+                        E.h_roll_left -= 1.0f;
+                        if (E.h_roll_left <= 0.0f) {
+                            E.h_roll--; E.h_roll_left += E.h_roll_len;
+                            E.h_env = 1.0f; E.h_gain = E.h_roll_g * (0.7f + 0.2f * rndu());
+                        }
+                    }
+                    if (E.s_env > 1e-4f) {           /* snare: a body tone and bright noise; a clap: bursts, then a tail */
+                        float nz = rnd(), hp, sv;
+                        E.s_ph += kt->s_tone / SR; if (E.s_ph >= 1.0f) E.s_ph -= 1.0f;
+                        E.s_lp += sHp * (nz - E.s_lp);
+                        hp = nz - E.s_lp;
+                        E.s_hp += 0.6f * (hp - E.s_hp);                 /* a little softer at the very top */
+                        sv = (fm_sin_turns(E.s_ph) * E.s_tenv * kt->s_body * 1.4f + E.s_hp * (1.1f - 0.4f * kt->s_body))
+                             * E.s_env * E.s_gain * sAmp;
+                        E.s_env *= E.s_clapn ? sBurst : sDec;
+                        E.s_tenv *= sTdec;
+                        if (E.s_clapn) {
+                            E.s_clapt -= 1.0f;
+                            if (E.s_clapt <= 0.0f) { E.s_clapn--; E.s_env = 1.0f; E.s_clapt = 0.011f * SR; }
+                        }
+                        rv += sv;
                     }
                     dh_l = hv * 0.85f + rv; dh_r = hv + rv * 0.85f;
                 }
@@ -917,16 +984,34 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                 if (E.ld_st) {                    /* the melody voice (white keys): its own sound, level and reverb send */
                     const sound_t *q = &E.lp;
                     float lv;
-                    E.ld_ph1 += ldi1; if (E.ld_ph1 >= 1.0f) E.ld_ph1 -= 1.0f;
-                    E.ld_ph2 += ldi2; if (E.ld_ph2 >= 1.0f) E.ld_ph2 -= 1.0f;
-                    lv = osc(q->w1, E.ld_ph1, ldi1) + q->mix2 * osc(q->w2, E.ld_ph2, ldi2);
+                    if (leng == ENGINE_FM) {           /* two operators, as the chords' FM */
+                        float idx;
+                        E.ld_ies += (E.ld_ie - E.ld_ies) * 0.03f;
+                        idx = q->idx * (q->isus + (1.0f - q->isus) * E.ld_ies);
+                        float mod = fm_sin_turns(E.ld_pm + q->fb * E.ld_prev * 0.15915494f) * idx;
+                        E.ld_prev = mod;
+                        lv = fm_sin_turns(E.ld_ph1 + mod * 0.15915494f);
+                        E.ld_ph1 += ldi1; if (E.ld_ph1 >= 1.0f) E.ld_ph1 -= 1.0f;
+                        E.ld_pm += ldi2; if (E.ld_pm >= 1.0f) E.ld_pm -= 1.0f;
+                        E.ld_ie *= liC;
+                    } else if (leng == ENGINE_PLUCK) { /* its own plucked string */
+                        float x = rd_line(lks_buf, KS_N, E.ld_w, ldL);
+                        lks_buf[E.ld_w] = q->damp * 0.5f * (x + E.ld_last) + 1e-15f;
+                        E.ld_last = x;
+                        E.ld_w = (E.ld_w + 1u) & (KS_N - 1u);
+                        lv = x;
+                    } else {
+                        E.ld_ph1 += ldi1; if (E.ld_ph1 >= 1.0f) E.ld_ph1 -= 1.0f;
+                        E.ld_ph2 += ldi2; if (E.ld_ph2 >= 1.0f) E.ld_ph2 -= 1.0f;
+                        lv = osc(q->w1, E.ld_ph1, ldi1) + q->mix2 * osc(q->w2, E.ld_ph2, ldi2);
+                    }
                     E.ld_lp += lda * (lv - E.ld_lp);
                     E.ld_lp2 += lda * (E.ld_lp - E.ld_lp2);       /* two poles: 12 dB per octave */
                     if (E.ld_st == 1) { E.ld_e += 1.0f / (fm_maxf(0.003f, fm_minf(q->atk, 0.12f)) * SR); if (E.ld_e >= 1.0f) { E.ld_e = 1.0f; E.ld_st = 2; } }
                     else if (E.ld_st == 2) { E.ld_e = q->sus + (E.ld_e - q->sus) * ldC; if (q->sus < 0.001f && E.ld_e < 1e-4f) { E.ld_e = 0.0f; E.ld_st = 0; } }
                     else { E.ld_e *= lrC; if (E.ld_e < 1e-4f) { E.ld_e = 0.0f; E.ld_st = 0; } }
                     E.ld_fe *= lfC;
-                    ldo = E.ld_lp2 * E.ld_e * q->level * 0.176f * E.llev;
+                    ldo = E.ld_lp2 * E.ld_e * q->level * lgain * E.llev;
                 }
                 lrl = 0.0f; lrr = 0.0f;
                 if (E.lrev > 0.001f || E.lr_en > 1e-6f) {   /* the melody's reverb: none before it, smooth, the knob: a light tail .. big and airy */
@@ -959,7 +1044,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     uint32_t rp = E.dl_w + DL_N - (uint32_t)E.dl_time;
                     if (rp >= DL_N) rp -= DL_N;
                     float dlo = (float)dl_buf[0][rp] * (1.0f / 32767.0f), dro = (float)dl_buf[1][rp] * (1.0f / 32767.0f);
-                    float in = (l + r) * 0.5f * dsend;
+                    float in = (l + r) * 0.5f * dsend + ldo * E.ldel;   /* the melody's own echo send too */
                     E.dl_lp += 0.36f * (dro - E.dl_lp);          /* ~3.2 kHz in the feedback */
                     dl_buf[0][E.dl_w] = (int16_t)(fm_clampf(in + 0.42f * E.dl_lp, -1.0f, 1.0f) * 32767.0f);
                     dl_buf[1][E.dl_w] = (int16_t)(fm_clampf(dlo, -1.0f, 1.0f) * 32767.0f);
@@ -967,7 +1052,7 @@ void eng_render(int32_t *lr, uint32_t n, float gain)
                     dlo *= 0.8f; dro *= 0.8f;
                     /* reverb: pre-delay, 4 allpass diffusers, 4-line feedback network (Householder) */
                     {
-                        float x = ((l + r) * 0.5f + (dlo + dro) * 0.5f) * rsend + 1e-15f, yl[4], sumy = 0.0f, ol, orr;
+                        float x = ((l + r) * 0.5f + (dlo + dro) * 0.5f) * rsend + (dh_l + dh_r) * 0.5f * dspace + 1e-15f, yl[4], sumy = 0.0f, ol, orr;
                         float pre = rv_pre[E.pre_w];
                         uint32_t k;
                         rv_pre[E.pre_w] = x;

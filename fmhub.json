@@ -1,6 +1,6 @@
 {
-  "what": "One-finger chord player: the chords of a song sit on the black keys, the white keys play a melody that follows the chord's scale. 19 song sets, a melody voice with its own reverb, chord rhythms, bass and soft drums, ten runner characters on a neon screen. Chords and bass go out as MIDI.",
-  "author": "Tom (based on Blop by Obsimo)",
+  "what": "One-finger chord player: a song's chords on the black keys, a scale-matched melody on the white keys. 19 songs, each with its own sounds and drums; ten modern drum styles; a 4-bar looper; a runner that runs while you play, with missions and characters to unlock.",
+  "author": "swtdr34mz (based on Blop by Obsimo)",
   "kinds": "chords",
   "image": "site/img/hub.webp"
 }

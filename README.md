@@ -1,98 +1,66 @@
-# Blop (by Obsimo)
+# CHORD RUN
 
-Firmware pour le synthé M-VAVE FM-1 : grilles d'accords jouables à un doigt, rythmes d'accords, kick et
-sidechain, glide, reverb. Par Obsimo / OSR Records. Construit sur [fm1-base](https://github.com/charlesvestal/fm1-base)
-et [felucca-bsp](https://github.com/hugelton/felucca-bsp).
+A firmware for the M-VAVE FM-1 by **swtdr34mz**, based on [Blop / OSR-1](https://github.com/OSR-Experiment/OSR-1) by
+Obsimo (OSR Records). Built on [fm1-base](https://github.com/charlesvestal/fm1-base) and
+[felucca-bsp](https://github.com/hugelton/felucca-bsp).
 
-État : **prototype, jamais testé sur un vrai FM-1.** Le code tourne dans le simulateur et dans le navigateur.
+Play a song's chords with one finger and a melody over them, while a little runner runs as long as you play.
 
-## Commandes
+## What it does
 
-Une seule fonction par commande, sans touche shift.
+- **Songs:** 19 song sets. A song's chords sit on the **black keys** (left to right). Each song brings its own
+  sounds, tempo, bass and drum style.
+- **Melody:** the **white keys** play a melody in the scale of the chord that played last, so it always fits.
+- **Sounds:** 21 sounds in five families: ambient pads, soft keys, plucks (guitar, mallet, kalimba), keys (e-piano,
+  grand keys) and synths (80s brass, supersaw, pocket lead).
+- **Drums:** ten current styles, each with its own kit: house, pop, trap, phonk, drill, afrobeat, reggaeton, lo-fi,
+  dreamcore and angelcore (hi-hat rolls, claps, cowbell, washed snares).
+- **Loop:** press REC, play 4 bars of chords, and they play round while you play the melody on top.
+- **The run:** the runner runs while you play. The metres add up, the best run is kept, ten characters unlock, and
+  there is always a mission (play 24 chords, run 120 m at once, record a loop...) that gives extra metres.
 
-| Commande | Fonction |
+## Controls
+
+| Control | What it does |
 | --- | --- |
-| Les 27 touches | Accords de la grille : même nom de note, même accord (Do5 = 8e accord). Blanches = sûrs, noires = épices. Sous le Do4 une octave plus bas, au-dessus du Do5 une octave plus haut |
-| SELECT | Set d'accords (8) : les 4 à 8 accords d'un morceau sur les touches NOIRES (de gauche à droite) ; les touches BLANCHES jouent une mélodie dans la gamme de l'accord en cours |
-| ALGORITHM | Rythme des accords (16). OFF : l'accord sonne tant que la touche est enfoncée. Avec un rythme, l'accord continue (latch) : retaper la même touche l'arrête |
-| PRESET | Son (13, la famille s'affiche). Chaque son a son propre cutoff : le bouton K1 de la page principale le déplace vers le haut (plus clair) ou le bas (plus doux), 50 % = le son tel qu'il est conçu |
-| K1 / K2 / K3 / K4 | Les 4 réglages de la page en cours, toujours affichés en bas de l'écran. Page principale : cutoff, glide, longueur des notes, batterie (niveau ; 0 = pas de batterie) |
-| FX | Page FX : delay, tremolo, chorus, reverb |
-| SCL | Page ACCORDS : tonalité, voicing, richesse, strum |
-| ENV | Page GROOVE : BPM, swing, densité (moins / plus de coups), sidechain on/off |
-| LFO | Page BASSE : son (off, sub, rond, acid, reese, pluck, FM), niveau, motif (8), filtre |
-| EDIT | Page DÉCOR : bestiole (8), forme des yeux (6), fond (8), accessoire (6) |
-| GLO | Page BATTERIE : pattern (10, chacun avec son kit), kick, hi-hat, rim |
-| (rappuyer sur une page) | Retour à la page principale |
-| HOME | Retour à la page principale. Tenu : l'aide |
-| SAVE | Recul : la bestiole dans son bocal, la musique entendue depuis l'extérieur |
-| ARP / SEQ / PLAY / REC | La lampe / une pirouette / l'image seule, sans infos / nourrir |
+| Black keys | The song's chords. With a rhythm the chord keeps playing (the same key again stops it); without one (HELD) it plays while you hold the key |
+| White keys | The melody |
+| SELECT | Song (its own sounds, tempo and drums come with it) |
+| ALGORITHM | Chord rhythm (8): held, quarters, eighths, offbeat, pump, syncopated, tresillo, half-time |
+| PRESET | The chords' sound |
+| K1..K4 | The page's four settings (shown at the bottom of the screen) |
+| FX | Delay, tremolo, chorus, reverb |
+| SCL | Chords: key, voicing, richness, strum |
+| ENV | Groove: BPM, swing, density, sidechain |
+| LFO | Bass: sound, level, riff, filter |
+| EDIT | Melody: cutoff, level, SPACE (a reverb that grows, then echoes), preset |
+| GLO | Drums: style, kick, hats, snare |
+| HOME | Back to the main page. Held: the title and your progress |
+| REC | The loop: ready → the first chord records 4 bars → it plays. Again: pause / play. Held 1 s: cleared |
+| SEQ | The next character (the unlocked ones) |
+| SAVE | The music heard from outside the room |
+| PLAY | Hide the info |
 | OCT- / OCT+ | Octave |
-| HOME + REC (tenir 3 s) | Retour aux réglages du premier démarrage (compte à rebours ; lâcher avant = rien) |
+| HOME + REC held 3 s | Back to the first-start settings (your progress stays) |
 
-Au premier démarrage : pas de batterie, pas d'effets, une légère reverb. Quand on monte la batterie, le pattern de départ est KICK ONLY. L'écran du firmware est en anglais. Le sidechain (ON par défaut) pompe sur les
-kicks du pattern dès que la batterie est au-dessus de 0, même si le kick lui-même est à 0.
+Settings save themselves a few seconds after the last change; the progress after a few quiet seconds.
 
-L'écran : une bestiole noire aux yeux lumineux, vue comme une photo d'écran en gros plan (grille de pixels, moiré).
-Elle nage vers l'accord (gauche/droite = la touche, haut/bas = la hauteur, avec le glide), gonfle sur les coups du
-rythme, se fait écraser par le sidechain, chaque kick envoie une onde. L'eau change de couleur avec les accords.
-Cutoff = eau claire ou sombre, reverb = points lumineux, delay = échos. Elle dort quand rien ne joue.
+Chords and bass go out as MIDI over USB (channel 1), and an incoming MIDI clock sets the tempo.
 
-Les réglages se sauvent tout seuls 4 secondes après le dernier changement, quand aucun accord ne joue.
+## Building
 
-## MIDI vers Ableton
+Push to GitHub: the workflow builds the firmware (`.fwsc`) on every push (Actions → Artifacts). A tag `v1.3`, `v1.4`...
+(or a release made on GitHub with such a tag) builds a release with the `.fwsc` attached.
 
-Par le câble USB (le FM-1 n'a pas de sortie MIDI en jack). Les notes partent comme elles sonnent : les 4 notes de
-l'accord et la basse, canal 1, avec le rythme, le strum, le latch et le glide (legato : les nouvelles notes partent
-avant que les anciennes s'arrêtent, donc un synthé réglé en glide « legato » glisse de l'une à l'autre). La batterie
-n'est pas envoyée.
+Locally (Linux x86-64), the simulator and its tests:
 
-## Synchro MIDI depuis Ableton
+    git clone --recursive <this repository> && cd plop
+    python3 fm1-base/tools/build.py . --host
+    build/host/blop_host tests/basic.txt build/host     # the basics: screenshots, sounds
+    build/host/blop_host tests/run.txt build/host       # the run, missions, the loop, the progress kept
 
-Blop suit l'horloge MIDI (MIDI clock) qui arrive par USB : le tempo d'Ableton remplace le BPM (la page GROOVE affiche
-« 124 SYNC »), et les rythmes, la basse et la batterie se calent sur ses temps. Quand Ableton s'arrête ou n'envoie plus
-d'horloge, Blop continue seul au dernier tempo. Dans Ableton : Préférences → Link/Tempo/MIDI, ligne de sortie de
-« Blop FM-1 », cocher **Sync**.
+## Licence and credits
 
-## Fabriquer le firmware
-
-Le plus simple : pousser ce dépôt sur GitHub. Le workflow `.github/workflows/build.yml` télécharge l'outil de
-compilation de JieLi et le SDK AC79, lance les tests du simulateur, puis fabrique `build/blop.fwsc`. Le fichier se
-récupère dans l'onglet Actions, rubrique « Artifacts ».
-
-En local (Linux x86-64) :
-
-    git clone --recursive <ce dépôt> && cd osr1
-    python3 fm1-base/tools/build.py . --host            # simulateur
-    build/host/blop_host tests/basic.txt build/host      # tests, captures d'écran, sons
-    fm1-base/tools/get_toolchain.sh && fm1-base/bsp/tools/get_sdk.sh
-    JIELI_TOOLCHAIN=~/.jieli/toolchain AC79_SDK=~/.jieli/ac79-sdk python3 fm1-base/tools/build.py .
-    tools/build_web.sh                                   # version navigateur (Zig)
-
-## Fichiers
-
-- `app.c` : commandes, grilles, écran 240 x 240, réglages
-- `dsp/engine.c` : moteur sonore (voix sub / FM / corde pincée, filtre, enveloppes, séquenceur, kick, sidechain,
-  chorus, delay, reverb)
-- `data.h` : sons, rythmes et grilles, générés depuis le prototype (`node tools/gen_data.mjs`)
-- `prototype/` : le prototype navigateur d'origine
-
-## Charge processeur
-
-Firmware réel (`Blop.fwsc`) lancé dans l'émulateur de la puce [fm1-emu](https://github.com/joakimeriksson/fm1-emu)
-(horloge émulée à 240 MHz) : **18 à 19 % du temps dans l'interruption audio**, accord tenu (son SIROP), kick et
-sidechain compris. Le vrai FM-1 tourne vers 360 MHz. Il reste donc beaucoup de marge (reverb plus riche, plus de voix).
-À confirmer sur la machine (`plat_cpu_pct`).
-
-## Télécharger
-
-La dernière version compilée est sur la page **Releases** du dépôt (`Blop.fwsc`, pas encore testée sur un vrai FM-1).
-
-## Licence
-
-OSR-1 est un logiciel libre sous **GPL-3.0-only** (voir `LICENSE`). Le code reste public, chacun peut l'étudier, le
-modifier et le redistribuer sous la même licence. Il peut donc reprendre du code d'autres firmwares FM-1 sous GPL
-(Felucca, Clipper...) ; chaque emprunt est crédité dans `CREDITS.md`.
-
-Les fichiers de fm1-base et felucca-bsp restent sous MPL-2.0 (compatible avec la GPL).
-Le paquet installable contient trois fichiers du SDK AC79 de JieLi (Apache-2.0).
+GPL-3.0-only (see `LICENSE`), as Blop / OSR-1 it is based on. fm1-base and felucca-bsp stay under MPL-2.0. The
+installable package carries three files of JieLi's AC79 SDK (Apache-2.0). Every borrowed part is listed in
+`CREDITS.md`.

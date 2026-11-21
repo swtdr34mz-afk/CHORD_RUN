@@ -1,0 +1,457 @@
+# CHORD RUN: the runner's metres, the missions one after the other, the characters, the loop, the progress kept
+wait 600
+expect metres 0
+expect unlocked 2
+expect mission 0
+expect character 0
+expect loop 0
+shot run_start.png
+# SEQ: only the unlocked characters (CUBE, DIAMOND)
+tap SEQ
+wait 30
+expect character 1
+tap SEQ
+wait 30
+expect character 0
+# mission 1: play 24 chords (no rhythm: a press each)
+key 1 down
+wait 150
+key 1 up
+wait 50
+key 3 down
+wait 150
+key 3 up
+wait 50
+key 5 down
+wait 150
+key 5 up
+wait 50
+key 8 down
+wait 150
+key 8 up
+wait 50
+key 1 down
+wait 150
+key 1 up
+wait 50
+key 3 down
+wait 150
+key 3 up
+wait 50
+key 5 down
+wait 150
+key 5 up
+wait 50
+key 8 down
+wait 150
+key 8 up
+wait 50
+key 1 down
+wait 150
+key 1 up
+wait 50
+key 3 down
+wait 150
+key 3 up
+wait 50
+key 5 down
+wait 150
+key 5 up
+wait 50
+shot run_running.png
+key 8 down
+wait 150
+key 8 up
+wait 50
+key 1 down
+wait 150
+key 1 up
+wait 50
+key 3 down
+wait 150
+key 3 up
+wait 50
+key 5 down
+wait 150
+key 5 up
+wait 50
+key 8 down
+wait 150
+key 8 up
+wait 50
+key 1 down
+wait 150
+key 1 up
+wait 50
+key 3 down
+wait 150
+key 3 up
+wait 50
+key 5 down
+wait 150
+key 5 up
+wait 50
+key 8 down
+wait 150
+key 8 up
+wait 50
+key 1 down
+wait 150
+key 1 up
+wait 50
+key 3 down
+wait 150
+key 3 up
+wait 50
+key 5 down
+wait 150
+key 5 up
+wait 50
+key 8 down
+wait 150
+key 8 up
+wait 50
+wait 100
+expect missions 1
+expect mission 1
+expect metres_h 1
+shot mission_done.png
+# mission 2: 40 melody notes (white keys)
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+key 7 down
+wait 120
+key 7 up
+wait 40
+key 9 down
+wait 120
+key 9 up
+wait 40
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+key 7 down
+wait 120
+key 7 up
+wait 40
+key 9 down
+wait 120
+key 9 up
+wait 40
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+key 7 down
+wait 120
+key 7 up
+wait 40
+key 9 down
+wait 120
+key 9 up
+wait 40
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+key 7 down
+wait 120
+key 7 up
+wait 40
+key 9 down
+wait 120
+key 9 up
+wait 40
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+key 7 down
+wait 120
+key 7 up
+wait 40
+key 9 down
+wait 120
+key 9 up
+wait 40
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+key 7 down
+wait 120
+key 7 up
+wait 40
+key 9 down
+wait 120
+key 9 up
+wait 40
+key 0 down
+wait 120
+key 0 up
+wait 40
+key 2 down
+wait 120
+key 2 up
+wait 40
+key 4 down
+wait 120
+key 4 up
+wait 40
+key 6 down
+wait 120
+key 6 up
+wait 40
+wait 100
+expect missions 2
+expect mission 2
+# mission 3: one run of 120 m (a chord held: LET IT BE, 72 BPM, 3 m/s): then past 250 m, SPIKE unlocks
+key 1 down
+wait 25000
+shot run_long.png
+wait 17000
+key 1 up
+wait 200
+expect missions 3
+expect mission 3
+expect unlocked 3
+shot unlock.png
+tap SEQ
+wait 30
+tap SEQ
+wait 30
+expect character 2
+shot spike.png
+# the run ends after 3 s of quiet: the best run kept
+wait 3500
+expect running 0
+expect best_h 1
+# mission 4: three songs
+key 1 down
+wait 100
+key 1 up
+wait 100
+turn SELECT 1
+wait 50
+key 1 down
+wait 100
+key 1 up
+wait 100
+turn SELECT 1
+wait 50
+key 1 down
+wait 100
+key 1 up
+wait 100
+expect missions 4
+expect mission 4
+expect grid 2
+# mission 5: all the chords of a song (TAKE ON ME: five)
+key 1 down
+wait 100
+key 1 up
+wait 100
+key 3 down
+wait 100
+key 3 up
+wait 100
+key 5 down
+wait 100
+key 5 up
+wait 100
+key 8 down
+wait 100
+key 8 up
+wait 100
+key 10 down
+wait 100
+key 10 up
+wait 100
+expect missions 5
+expect mission 5
+# mission 6: jam 45 s with drums: a rhythm, the drums on (main page K4), a chord that keeps playing
+turn ALGO 2
+wait 30
+expect rhythm 2
+turn K4 4
+wait 150
+turn K4 4
+wait 150
+turn K4 4
+wait 150
+turn K4 4
+wait 150
+turn K4 4
+wait 150
+turn K4 4
+wait 150
+key 3 down
+wait 30
+key 3 up
+wait 30
+expect active 1
+wav jam_takeonme.wav
+wait 6000
+wavstop
+shot jam.png
+wait 41000
+expect missions 6
+expect mission 6
+key 3 down
+wait 30
+key 3 up
+wait 30
+expect active 0
+# mission 7: record a loop. REC: ready; the first chord records 4 bars (84 BPM: 11.43 s), then it plays round
+tap REC
+wait 50
+expect loop 1
+shot loop_ready.png
+key 1 down
+wait 30
+key 1 up
+wait 30
+expect loop 2
+expect chord 1
+wait 2797
+key 3 down
+wait 30
+key 3 up
+wait 400
+shot loop_rec.png
+wait 2427
+key 5 down
+wait 30
+key 5 up
+wait 2827
+key 8 down
+wait 30
+key 8 up
+wait 3100
+expect loop 3
+expect loopn 4
+expect missions 7
+# the loop plays the chords where they were played (each about 2.86 s)
+wait 1300
+expect chord 1
+shot loop_play.png
+wait 2860
+expect chord 3
+wait 2860
+expect chord 5
+wait 2860
+expect chord 8
+wait 2860
+expect chord 1
+# the melody over it
+key 7 down
+wait 300
+expect lead 1
+key 7 up
+wait 100
+# REC: paused (silence), REC: again from its start, REC held 1 s: gone
+tap REC
+wait 60
+expect loop 4
+expect active 0
+tap REC
+wait 300
+expect loop 3
+expect chord 1
+press REC
+wait 1200
+release REC
+wait 60
+expect loop 0
+expect loopn 0
+# the progress is kept (after 4 s of quiet) and comes back after a restart
+expect active 0
+wait 6000
+
+reboot
+wait 600
+expect missions 7
+expect unlocked 5
+expect metres_h 14
+expect mission 7
+# HOME held: the progress
+press HOME
+wait 2500
+shot help_progress.png
+release HOME
+wait 100

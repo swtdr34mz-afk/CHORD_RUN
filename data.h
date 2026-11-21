@@ -5,10 +5,10 @@
  * replaced by 13 sounds after DRIFT's factory presets (Leo Kuroshita, Hügelton Instruments, MIT; see CREDITS.md).
  * Do not regenerate with gen_data.mjs: it would bring the old sounds back and drop NSOUND, FAMILY_OF and the cut column. */
 #pragma once
-static const char *const FAMILY_NAME[2] = {"AMBIENT", "SOFT KEYS"};
-#define NFAMILY 2
-#define NSOUND 13
-static const uint8_t FAMILY_OF[NSOUND] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1};   /* the family of each sound */
+static const char *const FAMILY_NAME[5] = {"AMBIENT", "SOFT KEYS", "PLUCKS", "KEYS", "SYNTH"};
+#define NFAMILY 5
+#define NSOUND 21
+static const uint8_t FAMILY_OF[NSOUND] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4};   /* the family of each sound */
 static const char *const SOUND_NAME[NSOUND] = {
     "PAPER STRINGS",
     "STILL WATER",
@@ -22,7 +22,15 @@ static const char *const SOUND_NAME[NSOUND] = {
     "DUST PLUCK",
     "MOON KEYS",
     "SINE DROPS",
-    "NIGHT SIGNAL"
+    "NIGHT SIGNAL",
+    "NYLON PLUCK",
+    "MALLET",
+    "KALIMBA",
+    "E-PIANO",
+    "GRAND KEYS",
+    "80S BRASS",
+    "SUPERSAW",
+    "POCKET LEAD"
 };
 /* the last number of a sound is its own cutoff in Hz (the CUTOFF knob at 50 %); the knob moves it up and down */
 static const sound_t SOUNDS[NSOUND] = {
@@ -35,54 +43,62 @@ static const sound_t SOUNDS[NSOUND] = {
     {ENGINE_SUB, 1, 1, 16.0f, 0.0f, 0.5301f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 1.4113f, 1.0227f, 0.8268f, 3.6421f, 0.198f, 0.9285f, 0.3543f, 3.0f, 0.3f, 0.0504f, 0.45f, 0.65f, 461.0f},   /* AIRFIELD */
     {ENGINE_SUB, 0, 0, 23.0f, 0.0f, 1.0159f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 2.9145f, 1.0227f, 0.9291f, 4.5273f, 0.0911f, 0.9285f, 0.4252f, 3.0f, 0.3f, 0.0126f, 0.45f, 0.8f, 898.0f},   /* SLOW BLOOM */
     {ENGINE_SUB, 3, 3, 7.0f, 0.0f, 1.0159f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.0012f, 0.4952f, 0.1575f, 0.8539f, 0.0f, 0.4496f, 0.1559f, 0.0f, 0.3f, 0.0f, 0.45f, 1.3f, 8840.0f},   /* GLASS TIDE */
-    {ENGINE_SUB, 0, 0, 8.0f, 0.0f, 0.6494f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.001f, 0.2772f, 0.0f, 0.2153f, 3.4286f, 0.2517f, 0.1276f, 0.0f, 0.3f, 0.0f, 0.45f, 0.8f, 146.0f},   /* DUST PLUCK */
+    {ENGINE_SUB, 0, 0, 8.0f, 0.0f, 0.6494f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.001f, 0.2772f, 0.0f, 0.2153f, 3.4286f, 0.2517f, 0.1276f, 0.0f, 0.3f, 0.0f, 0.45f, 1.3f, 146.0f},   /* DUST PLUCK: louder (it was the quietest) */
     {ENGINE_SUB, 2, 2, 5.0f, 0.0f, 0.4598f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.0013f, 0.3446f, 0.2756f, 0.4446f, 0.6209f, 0.3128f, 0.1984f, 0.0f, 0.3f, 0.0f, 0.45f, 1.4f, 2740.0f},   /* MOON KEYS */
-    {ENGINE_SUB, 3, 3, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.001f, 0.1668f, 0.0f, 0.4135f, 0.0f, 0.1515f, 0.0638f, 0.0f, 0.3f, 0.0f, 0.45f, 1.3f, 16000.0f},   /* SINE DROPS */
+    {ENGINE_SUB, 3, 3, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.001f, 0.1668f, 0.0f, 0.4135f, 0.0f, 0.1515f, 0.0638f, 0.0f, 0.3f, 0.0f, 0.45f, 1.7f, 16000.0f},   /* SINE DROPS: louder */
     {ENGINE_SUB, 0, 0, 8.0f, 0.0f, 0.6494f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.0021f, 0.2074f, 0.5906f, 0.2877f, 0.7312f, 0.1883f, 0.1701f, 0.0f, 0.3f, 0.0f, 0.45f, 0.8f, 1628.0f},   /* NIGHT SIGNAL */
+    /* the song sounds (CHORD RUN): a guitar, mallets, keys and synths, so the songs sound apart */
+    {ENGINE_PLUCK, 0, 0, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.45f, 0.9965f, 0.002f, 3.0f, 0.9f, 0.35f, 0.8f, 0.3f, 0.25f, 0.0f, 0.3f, 0.0f, 0.45f, 0.9f, 1800.0f},   /* NYLON PLUCK */
+    {ENGINE_FM, 3, 3, 0.0f, 0.0f, 0.0f, 4.0f, 2.2f, 0.07f, 0.0f, 0.0f, 0.6f, 0.996f, 0.001f, 1.0f, 0.0f, 0.3f, 0.0f, 0.3f, 0.1f, 0.0f, 0.3f, 0.0f, 0.45f, 0.9f, 6000.0f},   /* MALLET */
+    {ENGINE_FM, 3, 3, 0.0f, 0.0f, 0.0f, 7.0f, 1.6f, 0.08f, 0.0f, 0.0f, 0.6f, 0.996f, 0.001f, 2.2f, 0.0f, 0.5f, 0.0f, 0.3f, 0.2f, 0.0f, 0.3f, 0.0f, 0.45f, 0.9f, 8000.0f},   /* KALIMBA */
+    {ENGINE_FM, 3, 3, 0.0f, 0.0f, 0.0f, 1.0f, 1.6f, 0.45f, 0.35f, 0.08f, 0.6f, 0.996f, 0.002f, 4.0f, 0.25f, 0.45f, 0.0f, 0.3f, 0.55f, 0.0f, 0.3f, 0.0f, 0.45f, 0.9f, 5000.0f},   /* E-PIANO */
+    {ENGINE_FM, 3, 3, 0.0f, 0.0f, 0.0f, 1.0f, 3.0f, 0.35f, 0.2f, 0.35f, 0.6f, 0.996f, 0.001f, 5.0f, 0.0f, 0.5f, 0.0f, 0.3f, 0.15f, 0.0f, 0.3f, 0.0f, 0.45f, 0.85f, 5000.0f},   /* GRAND KEYS */
+    {ENGINE_SUB, 0, 0, 14.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.03f, 0.6f, 0.75f, 0.35f, 1.6f, 0.35f, 0.45f, 0.0f, 0.3f, 0.0f, 0.45f, 0.8f, 900.0f},   /* 80S BRASS */
+    {ENGINE_SUB, 0, 0, 28.0f, 12.0f, 0.6f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.006f, 0.5f, 0.85f, 0.45f, 0.4f, 0.3f, 0.9f, 0.0f, 0.3f, 0.0f, 0.45f, 0.75f, 2600.0f},   /* SUPERSAW */
+    {ENGINE_SUB, 1, 1, 6.0f, 12.0f, 0.35f, 1.0f, 1.0f, 0.4f, 0.2f, 0.0f, 0.6f, 0.996f, 0.004f, 0.3f, 0.8f, 0.2f, 0.6f, 0.2f, 0.2f, 0.0f, 0.3f, 0.0f, 0.45f, 0.7f, 2200.0f},   /* POCKET LEAD */
 };
-#define NRHYTHM 16
-static const char *const RHYTHM_NAME[NRHYTHM] = {"HELD", "2-STEP", "QUARTERS", "EIGHTHS", "SIXTEENTHS", "OFFBEAT", "PUMP", "TRESILLO", "TRANCE GATE", "GARAGE STAB", "SYNCOPATED", "SHUFFLE", "BOSSA", "STUTTER", "HALF-TIME", "FLOATING"};
+#define NRHYTHM 8
+static const char *const RHYTHM_NAME[NRHYTHM] = {"HELD", "QUARTERS", "EIGHTHS", "OFFBEAT", "PUMP", "SYNCOPATED", "TRESILLO", "HALF-TIME"};
 /* 16 steps: X accent, x soft, - tie, . rest ("" = held) */
 static const struct { const char *s; float gate, swing, atk; } RHYTHM_DEF[NRHYTHM] = {
     {"", 0.0f, 0.0f, 0.0f},
-    {"X..x...x..X..x..", 0.45f, 0.12f, 0.0f},
     {"X---x---X---x---", 0.85f, 0.0f, 0.0f},
     {"X-x-X-x-X-x-X-x-", 0.6f, 0.0f, 0.0f},
-    {"XxxxXxxxXxxxXxxx", 0.3f, 0.0f, 0.0f},
     {"..X...X...X...X.", 0.55f, 0.0f, 0.0f},
     {"X---X---X---X---", 0.95f, 0.0f, 0.09f},
-    {"X--x--x-X--x--x-", 0.7f, 0.0f, 0.0f},
-    {"X.XX.XX.X.XX.XX.", 0.55f, 0.0f, 0.0f},
-    {"..X..x....X..x.x", 0.35f, 0.15f, 0.0f},
     {"X..x..x...x..x..", 0.4f, 0.0f, 0.0f},
-    {"X.xxX.xxX.xxX.x.", 0.45f, 0.2f, 0.0f},
-    {"X..x..x...x.x...", 0.55f, 0.0f, 0.0f},
-    {"XxXx....X...xxxx", 0.4f, 0.0f, 0.0f},
+    {"X--x--x-X--x--x-", 0.7f, 0.0f, 0.0f},
     {"X-------x-----x-", 0.9f, 0.0f, 0.0f},
-    {"X-----x-----x---", 0.8f, 0.0f, 0.0f},
 };
 #define NGRID 19
 /* chord SETS: the chords of a song, one per BLACK key from the left (up to 8 of them); the white keys play a melody in the
  * scale of the chord that sounds. A chord is its semitones above the set's key + a quality (M maj, V dominant-major, m, D dom7,
- * d dim, s sus4, S sus2, a aug); key 0 = C .. 11 = B is the song's own key, rich the richness it starts with. */
-static const struct { const char *name, *by; uint8_t key, rich; const char *white; } GRID_DEF[NGRID] = {
-    {"LET IT BE", "THE BEATLES", 0, 0, "0M 7M 9m 5M"},
-    {"STAIRWAY TO HEAVEN", "LED ZEPPELIN", 9, 0, "0m 3M 5M 8M 10M 7M"},
-    {"TAKE ON ME", "A HA", 9, 0, "0M 9m 5M 7M 2m"},
-    {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M"},
-    {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 3M 5m 7s"},
-    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 7m"},
-    {"HELLO", "ADELE", 5, 0, "0m 3M 10M 5M"},
-    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M"},
-    {"BLINDING LIGHTS", "THE WEEKND", 5, 0, "0m 7m 10M 5M"},
-    {"SOMEONE LIKE YOU", "ADELE", 9, 0, "0M 7M 9m 5M"},
-    {"CREEP", "RADIOHEAD", 7, 0, "0M 4M 5M 5m"},
-    {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M"},
-    {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M"},
-    {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M"},
-    {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M"},
-    {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M"},
-    {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M"},
-    {"WENN DAS LIEBE IST", "NINA CHUBA", 5, 0, "0m 10M 8M 5m 7M 5M"},
-    {"PERFECT", "ED SHEERAN", 8, 0, "0M 9m 5M 7M"},
+ * d dim, s sus4, S sus2, a aug); key 0 = C .. 11 = B is the song's own key, rich the richness it starts with.
+ * Then the song's own sound (CHORD RUN), set when the song is chosen: the chords' sound, the melody's (0 = as the chords, else
+ * the sound + 1), the bass's sound and riff, the chord rhythm (taken only when a rhythm plays), the drums' style, the tempo. */
+static const struct {
+    const char *name, *by;
+    uint8_t key, rich;
+    const char *white;
+    uint8_t snd, msnd, bsnd, bmot, rhy, dpat, bpm;
+} GRID_DEF[NGRID] = {
+    {"LET IT BE", "THE BEATLES", 0, 0, "0M 7M 9m 5M", 17, 12, 2, 0, 1, 1, 72},
+    {"STAIRWAY TO HEAVEN", "LED ZEPPELIN", 9, 0, "0m 3M 5M 8M 10M 7M", 13, 3, 1, 0, 2, 7, 72},
+    {"TAKE ON ME", "A HA", 9, 0, "0M 9m 5M 7M 2m", 18, 21, 5, 3, 2, 1, 84},
+    {"AFRICA", "TOTO", 9, 0, "9m 5M 0M 7M", 18, 16, 2, 0, 5, 5, 93},
+    {"BABY ONE MORE TIME", "BRITNEY SPEARS", 0, 0, "0m 7M 3M 5m 7s", 17, 11, 6, 6, 5, 1, 93},
+    {"ROLLING IN THE DEEP", "ADELE", 0, 0, "0m 10M 8M 7m", 13, 18, 1, 0, 2, 1, 105},
+    {"HELLO", "ADELE", 5, 0, "0m 3M 10M 5M", 17, 12, 1, 1, 1, 1, 79},
+    {"SHAPE OF YOU", "ED SHEERAN", 1, 0, "0m 5m 8M 10M", 14, 15, 1, 6, 6, 6, 96},
+    {"BLINDING LIGHTS", "THE WEEKND", 5, 0, "0m 7m 10M 5M", 19, 19, 5, 7, 2, 1, 86},
+    {"SOMEONE LIKE YOU", "ADELE", 9, 0, "0M 7M 9m 5M", 17, 12, 1, 0, 2, 7, 70},
+    {"CREEP", "RADIOHEAD", 7, 0, "0M 4M 5M 5m", 13, 3, 2, 0, 2, 1, 92},
+    {"FALLING BASS", "SOMEONE LIKE YOU STYLE", 0, 0, "0M 7M 9m 5M", 3, 11, 2, 0, 7, 7, 80},
+    {"SHALLOW", "LADY GAGA", 7, 0, "2m 7M 0M 9m 5M", 13, 18, 1, 1, 2, 1, 96},
+    {"ALWAYS REMEMBER US", "LADY GAGA", 0, 0, "5M 0M 9m 7M", 17, 17, 2, 0, 1, 1, 70},
+    {"BETTER NOW", "POST MALONE", 10, 0, "2m 7M 0M 5M", 13, 13, 1, 0, 5, 2, 145},
+    {"SAY MY NAME", "DESTINYS CHILD", 0, 0, "0m 8M 5m 10M", 16, 11, 6, 6, 5, 2, 138},
+    {"THE BUSINESS", "TIESTO", 8, 0, "0m 10M 8M", 19, 21, 3, 2, 3, 0, 120},
+    {"WENN DAS LIEBE IST", "NINA CHUBA", 5, 0, "0m 10M 8M 5m 7M 5M", 16, 16, 2, 6, 5, 5, 100},
+    {"PERFECT", "ED SHEERAN", 8, 0, "0M 9m 5M 7M", 13, 12, 2, 0, 6, 7, 95},
 };

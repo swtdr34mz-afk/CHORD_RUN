@@ -32,7 +32,7 @@ Play a song's chords with one finger and a melody over them, while a little runn
 | PRESET | The chords' sound |
 | K1..K4 | The page's four settings (shown at the bottom of the screen) |
 | FX | Delay, tremolo, chorus, reverb |
-| SCL | Chords: key, voicing, richness, strum |
+| SEL | Chords: key, voicing, MOVEMENT (swell, pulse, wobble, pump: in time), ARP (up, down, up-down, random). SEL again: CHORDS 2: BASS NOTE (root, 3rd, 5th, pedal: slash chords), WIDTH, SPREAD (the chord's voices across the stereo field: diverge, alternate, diverge2, noteval), ARP RATE |
 | ENV | Groove: BPM, swing, density, sidechain |
 | LFO | Bass: sound, level, riff, filter |
 | EDIT | Melody: cutoff, level, SPACE (a reverb that grows, then echoes), preset. EDIT again: MELODY 2: glide, octave, vibrato, ASSIST |

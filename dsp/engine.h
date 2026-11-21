@@ -78,6 +78,12 @@ void eng_muffle(float m);
 void eng_blip(int kind);
 /* swing 0..1, density -1..1 (fewer / more hits), gate 0..1 (0.5 = as written), strum 0..1 */
 void eng_groove(float swing, float density, float gate, float strum);
+/* the chords' extras: the arpeggiator (ARP_*: the chord's notes one after another, every arp_steps steps of the rhythm),
+ * movement (MOVE_*: the filter or the level moving in time), the voices across the stereo field (SPREAD_*, width 0..1) */
+enum { ARP_OFF, ARP_UP, ARP_DOWN, ARP_UPDOWN, ARP_RANDOM, NARP };
+enum { MOVE_OFF, MOVE_SWELL, MOVE_PULSE, MOVE_WOBBLE, MOVE_PUMP, NMOVE };
+enum { SPREAD_DIVERGE, SPREAD_ALTERNATE, SPREAD_DIVERGE2, SPREAD_NOTEVAL, NSPREAD };
+void eng_chordfx(int arp, int arp_steps, int move, float width, int spread);
 void eng_drums(const drums_t *d, float kick, float hat, float snare);   /* snare: the snare and the perc */
 void eng_bass(int sound, int motif, float level, float cut);
 void eng_panic(void);

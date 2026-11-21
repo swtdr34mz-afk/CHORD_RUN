@@ -14,7 +14,8 @@
  *   top row: page buttons (the same button again: back to the main page)
  *                   main  cutoff, glide, note length, drums (level; 0 = no drums)
  *                   FX    delay, tremolo, chorus, reverb
- *                   SCL   chords: key, voicing, richness, strum
+ *                   SEL   chords: key, voicing, movement (the filter / level in time), arpeggiator; SEL again: CHORDS 2:
+ *                         bass note (root, 3rd, 5th, pedal), width, spread (the voices across the stereo field), arp rate
  *                   ENV   groove: BPM, swing, density, sidechain on/off
  *                   LFO   bass: sound, level, riff, filter
  *                   EDIT  melody: cutoff, level, space (reverb, then echoes), preset; EDIT again: MELODY 2: glide, octave,
@@ -35,7 +36,8 @@
 #include "patterns.h"
 
 /* ------------------------------------------------------------------ settings --- */
-#define SET_MAGIC 0x4F535238u            /* "OSR8" (v8: the melody's glide, octave, vibrato, ASSIST; v7 is taken over) */
+#define SET_MAGIC 0x4F535239u            /* "OSR9" (v9: the chords' movement, arpeggiator, bass note, stereo spread; v7, v8 taken over) */
+#define SET_MAGIC_V8 0x4F535238u
 #define SET_MAGIC_V7 0x4F535237u
 typedef struct {
     uint32_t magic;
@@ -51,6 +53,7 @@ typedef struct {
     uint8_t mglide, moct, mvib, assist;         /* melody 2: glide, octave (2 = as is), vibrato; ASSIST (the good notes light up) */
     uint8_t mcut, mlev, mrev, msound;           /* melody: cutoff, level, space (reverb, then echoes), preset (0 = as the chords) */
     uint8_t rsv[3];
+    uint8_t cmove, carp, cbass, cwidth, cspread, crate;   /* chords: movement, arpeggiator, bass note, width, spread, arp rate */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -64,6 +67,7 @@ static void settings_defaults(void)
     set.cutoff = 50; set.glide = 17; set.gate = 50; set.drums = 0;      /* first start: no drums */
     set.delay = 0; set.trem = 0; set.chorus = 0; set.reverb = 22;   /* no FX, a light reverb */
     set.strum = 0;
+    set.cmove = 0; set.carp = 0; set.cbass = 0; set.cwidth = 50; set.cspread = 0; set.crate = 2;
     set.bpm = 118; set.swing = 0; set.dens = 50; set.side = 1;
     set.dpat = 0; set.dkick = 75;   /* the drums start as a plain kick */ set.dhat = 30; set.drim = 25;
     set.bsound = BASS_ROND; set.blevel = 80; set.bmotif = MOTIF_SUIT; set.bcut = 45;
@@ -471,6 +475,11 @@ static void send_fx(void)
 {
     eng_fx((float)set.reverb * 0.01f, (float)set.delay * 0.01f, (float)set.trem * 0.01f, (float)set.chorus * 0.01f);
 }
+static const uint8_t ARP_STEPS[3] = {4, 2, 1};          /* ARP RATE: 1/4, 1/8, 1/16 */
+static void send_cfx(void)
+{
+    eng_chordfx(set.carp, ARP_STEPS[set.crate < 3 ? set.crate : 2], set.cmove, (float)set.cwidth * 0.01f, set.cspread);
+}
 static void send_groove(void)
 {
     eng_groove((float)set.swing * 0.01f, ((float)set.dens - 50.0f) * 0.02f, (float)set.gate * 0.01f,
@@ -512,8 +521,15 @@ static void play(int idx)
     if (c.n == 0) return;                                       /* a silent key */
     voice_chord(&c, notes);
     spread(notes, set.voicing);
-    bass = (float)(36 + (c.root + c.bass_off) % 12 + clamp(c.shift, -12, 12));
-    chord_name(&c, chord_txt);
+    {   /* the bass note: the root, the chord's third or fifth (a slash chord, C/E), or the song's tonic all along (a pedal) */
+        int bpc = c.root;
+        if (set.cbass == 1 && c.n > 1) bpc = (c.root + c.iv[1]) % 12;
+        else if (set.cbass == 2 && c.n > 2) bpc = (c.root + c.iv[2]) % 12;
+        else if (set.cbass == 3) bpc = set.key;
+        bass = (float)(36 + bpc + clamp(c.shift, -12, 12));
+        chord_name(&c, chord_txt);
+        if (bpc != c.root) { text_cat(chord_txt, "/"); text_cat(chord_txt, NOTE[bpc]); }
+    }
     if (cur_idx != idx || !active) chord_at = now;
     cur_idx = idx;
     hop_at = now;
@@ -538,16 +554,21 @@ static void rechord(void)
 }
 
 /* ------------------------------------------------------------------ pages --- */
-enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, PG_MELODY2, NPAGE };
-static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS", "MELODY 2"};
-static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO, B_EDIT};   /* EDIT: MELODY, again MELODY 2 */
+enum { PG_MAIN, PG_FX, PG_ACC, PG_GROOVE, PG_BASS, PG_MELODY, PG_DRUMS, PG_MELODY2, PG_ACC2, NPAGE };
+static const char *const PAGE_NAME[NPAGE] = {"MAIN", "FX", "CHORDS", "GROOVE", "BASS", "MELODY", "DRUMS", "MELODY 2", "CHORDS 2"};
+static const uint8_t PAGE_BTN[NPAGE] = {0xFF, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO, B_EDIT, B_SEL};   /* EDIT / SEL again: page 2 */
 static const uint8_t PAGE_RGB[NPAGE][3] = {{200, 255, 60}, {120, 200, 255}, {255, 190, 90}, {255, 120, 90},
-                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}, {210, 170, 255}};
+                                          {110, 240, 190}, {210, 170, 255}, {255, 150, 120}, {210, 170, 255}, {255, 190, 90}};
+static const char *const MOVE_NAME[NMOVE] = {"OFF", "SWELL", "PULSE", "WOBBLE", "PUMP"};
+static const char *const ARP_NAME[NARP] = {"OFF", "UP", "DOWN", "UP-DOWN", "RANDOM"};
+static const char *const BASSNOTE_NAME[4] = {"ROOT", "3RD", "5TH", "PEDAL"};
+static const char *const SPREAD_NAME[NSPREAD] = {"DIVERGE", "ALTERNATE", "DIVERGE2", "NOTEVAL"};
+static const char *const RATE_NAME[3] = {"1/4", "1/8", "1/16"};
 static const char *const MOCT_NAME[5] = {"-2", "-1", "0", "+1", "+2"};
 static const char *const ASSIST_NAME[3] = {"OFF", "CHORD", "GUIDE"};
 
 enum { KD_PCT, KD_OFF, KD_GLIDE, KD_BPM, KD_BIP, KD_LIST };
-enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL, G_MELODY };
+enum { G_NONE, G_PARAMS, G_FX, G_GROOVE, G_DRUMS, G_BASS, G_CHORD, G_DRUMLVL, G_MELODY, G_CFX };
 typedef struct {
     const char *lab;
     uint8_t *v;
@@ -561,7 +582,7 @@ static const kdef_t KD[NPAGE][4] = {
     {{"DELAY", &set.delay, 0, 100, KD_OFF, G_FX, 0}, {"TREMOLO", &set.trem, 0, 100, KD_OFF, G_FX, 0},
      {"CHORUS", &set.chorus, 0, 100, KD_OFF, G_FX, 0}, {"REVERB", &set.reverb, 0, 100, KD_PCT, G_FX, 0}},
     {{"KEY", &set.key, 0, 11, KD_LIST, G_CHORD, NOTE}, {"VOICING", &set.voicing, 0, 2, KD_LIST, G_CHORD, VOICING_NAME},
-     {"RICHNESS", &set.rich, 0, 3, KD_LIST, G_CHORD, RICH_NAME}, {"STRUM", &set.strum, 0, 100, KD_OFF, G_GROOVE, 0}},
+     {"MOVEMENT", &set.cmove, 0, NMOVE - 1, KD_LIST, G_CFX, MOVE_NAME}, {"ARP", &set.carp, 0, NARP - 1, KD_LIST, G_CFX, ARP_NAME}},
     {{"BPM", &set.bpm, 70, 160, KD_BPM, G_PARAMS, 0}, {"SWING", &set.swing, 0, 100, KD_OFF, G_GROOVE, 0},
      {"DENSITY", &set.dens, 0, 100, KD_BIP, G_GROOVE, 0}, {"SIDECHAIN", &set.side, 0, 1, KD_LIST, G_PARAMS, ONOFF_NAME}},
     {{"SOUND", &set.bsound, 0, NBASS_SOUND - 1, KD_LIST, G_BASS, BASS_NAME}, {"LEVEL", &set.blevel, 0, 100, KD_PCT, G_BASS, 0},
@@ -572,6 +593,8 @@ static const kdef_t KD[NPAGE][4] = {
      {"HATS", &set.dhat, 0, 100, KD_OFF, G_DRUMS, 0}, {"SNARE", &set.drim, 0, 100, KD_OFF, G_DRUMS, 0}},
     {{"GLIDE", &set.mglide, 0, 40, KD_GLIDE, G_MELODY, 0}, {"OCTAVE", &set.moct, 0, 4, KD_LIST, G_MELODY, MOCT_NAME},
      {"VIBRATO", &set.mvib, 0, 100, KD_OFF, G_MELODY, 0}, {"ASSIST", &set.assist, 0, 2, KD_LIST, G_NONE, ASSIST_NAME}},
+    {{"BASS NOTE", &set.cbass, 0, 3, KD_LIST, G_CHORD, BASSNOTE_NAME}, {"WIDTH", &set.cwidth, 0, 100, KD_PCT, G_CFX, 0},
+     {"SPREAD", &set.cspread, 0, NSPREAD - 1, KD_LIST, G_CFX, SPREAD_NAME}, {"ARP RATE", &set.crate, 0, 2, KD_LIST, G_CFX, RATE_NAME}},
 };
 
 static int settings_ok(void)
@@ -596,10 +619,16 @@ void app_init(void)
     for (g = 0; g < NGRID; g++) {
         grid_n[g] = (uint8_t)parse_chords(GRID_DEF[g].white, grid_w[g], 8);
     }
-    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) == (int)sizeof set && set.magic == SET_MAGIC_V7) {
-        set.magic = SET_MAGIC;                  /* v7 -> v8: the same layout, the melody's new settings at their start */
-        set.mglide = 0; set.moct = 2; set.mvib = 0; set.assist = 0;
-        if (set.dpat >= NDRUM) set.dpat = 0;
+    {
+        int n = plat_store_load(OBJ_SETTINGS, &set, sizeof set), old = (int)((const uint8_t *)&set.cmove - (const uint8_t *)&set);   /* v7 / v8: up to here */
+        if (n == old && (set.magic == SET_MAGIC_V7 || set.magic == SET_MAGIC_V8)) {
+            if (set.magic == SET_MAGIC_V7) { set.mglide = 0; set.moct = 2; set.mvib = 0; set.assist = 0; }
+            set.magic = SET_MAGIC;              /* v7 / v8 -> v9: the chords' new settings at their start, no richness or strum */
+            set.cmove = 0; set.carp = 0; set.cbass = 0; set.cwidth = 50; set.cspread = 0; set.crate = 2;
+            set.rich = GRID_DEF[set.grid < NGRID ? set.grid : 0].rich; set.strum = 0;
+            if (set.dpat >= NDRUM) set.dpat = 0;
+            if (set.page >= NPAGE) set.page = 0;
+        }
     }
     if (set.magic != SET_MAGIC || !settings_ok())
         settings_defaults();
@@ -608,6 +637,7 @@ void app_init(void)
     send_sound();
     send_rhythm();
     send_groove();
+    send_cfx();
     send_drums();
     send_bass();
     send_fx();
@@ -712,6 +742,7 @@ static void apply_group(int g)
     case G_DRUMS: send_drums(); break;
     case G_BASS: send_bass(); break;
     case G_MELODY: send_lead(); break;
+    case G_CFX: send_cfx(); break;
     case G_CHORD: rechord(); break;
     case G_DRUMLVL:
         if ((*KD[PG_MAIN][3].v > 0) != (prev_drums > 0)) send_params();
@@ -1056,6 +1087,11 @@ static void button(int k)
         dirty();
         return;
     }
+    if (k == B_SEL) {                    /* SEL: CHORDS, again: CHORDS 2, again: the main page */
+        set.page = (uint8_t)(set.page == PG_ACC ? PG_ACC2 : set.page == PG_ACC2 ? PG_MAIN : PG_ACC);
+        dirty();
+        return;
+    }
     for (p = 1; p < NPAGE; p++)
         if (PAGE_BTN[p] == k) {          /* a page; the same button again: back to the main page */
             set.page = (uint8_t)(set.page == p ? PG_MAIN : p);
@@ -1282,7 +1318,7 @@ static void input(void)
             set.page = page;
             ui.bowl = ui.clean = 0;
             eng_muffle(0.0f);
-            send_sound(); send_rhythm(); send_groove(); send_drums(); send_bass(); send_fx(); send_params();
+            send_sound(); send_rhythm(); send_groove(); send_cfx(); send_drums(); send_bass(); send_fx(); send_params();
             dirty();
             app_say("RESET", "FIRST SETTINGS BACK");
         } else if (!ui.reset_done && ui.reset_shown != 1u + held / 1000u) {
@@ -1675,14 +1711,15 @@ static void draw_screen(int bottom)
     neon_sky(HY, now);
     if (active && cur_idx >= 0) { int o; cs = key_slot(cur_idx, &cvar, &o); }
     if (bottom) {
-        const char *r = RICH_NAME[set.rich];
+        const char *r = set.carp ? ARP_NAME[set.carp] : set.cmove ? MOVE_NAME[set.cmove] : "";
         int32_t x;
         neon_sun(198, HY - 4, 34, HY, now);
         neon_runner(HY - 2, 146, (int)run.scroll, 1, now);
         if (now - run.party_at < 1600u && run.party_at) party(146, HY - 12, now - run.party_at);
         if (active) cv_text(8, 2, text_w(&FONT_L, chord_txt) <= 100 ? &FONT_L : &FONT_B, chord_txt, W);
         x = cv_text(8, 36, &FONT_XS, SOUND_NAME[set.sound], L);
-        cv_text(x + 8, 36, &FONT_XS, r, ACC1);
+        if (set.carp) { x = cv_text(x + 8, 36, &FONT_XS, "ARP", L); cv_text(x + 4, 36, &FONT_XS, r, ACC1); }
+        else if (r[0]) cv_text(x + 8, 36, &FONT_XS, r, ACC1);
         {   /* the metres: this run's (lime) while it runs, else all of them; under them the mission and how far it is */
             char m[32], pr[12];
             int32_t w;
@@ -1830,6 +1867,9 @@ int app_expect(const char *what, int *got)
     else if (!strncmp(what, "mel", 3) && what[3] >= '0' && what[3] <= '9') *got = (int)mel_pitch(atoi(what + 3));   /* a white key's note now */
     else if (!strcmp(what, "loop")) *got = lp.st;
     else if (!strcmp(what, "assist")) *got = set.assist;
+    else if (!strcmp(what, "carp")) *got = set.carp;
+    else if (!strcmp(what, "cbass")) *got = set.cbass;
+    else if (!strcmp(what, "cmove")) *got = set.cmove;
     else if (!strcmp(what, "assist_keys")) *got = (int)as_keys;
     else if (!strcmp(what, "guide_key")) *got = gd.key;
     else if (!strcmp(what, "guide_next")) *got = gd.next_key;
